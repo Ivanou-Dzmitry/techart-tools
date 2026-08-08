@@ -17,6 +17,8 @@ foreach ($f in $files) {
     Copy-Item (Join-Path $root $f) (Join-Path $tempDir $f)
 }
 
+Copy-Item (Join-Path $root "checkers") (Join-Path $tempDir "checkers") -Recurse
+
 Compress-Archive -Path (Join-Path $tempDir "*") -DestinationPath $zipPath
 Remove-Item $tempDir -Recurse -Force
 

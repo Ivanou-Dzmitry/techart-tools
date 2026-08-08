@@ -1,13 +1,11 @@
 schema_version = "1.0.0"
 
 id = "uv_tech_tools"
-version = "0.1.0"
+version = "0.7.0"
 name = "UV Tech Tools"
 tagline = "Tools for technical UV unwrapping workflows"
 maintainer = "Dzmitry Ivanou <id.cgtalk@gmail.com>"
 type = "add-on"
-
-website = ""
 
 tags = ["UV", "Mesh"]
 

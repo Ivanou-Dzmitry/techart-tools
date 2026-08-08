@@ -3,3 +3,5 @@ __pycache__/
 /dist/
 *.zip
 .vscode/
+old/polygon_tools_2_max-main
+old/polygon_tools_2_maya-main
