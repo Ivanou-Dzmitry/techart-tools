@@ -1,9 +1,10 @@
 import bpy
 
 from . import operators
+from . import checker
 from . import ui
 
-modules = (operators, ui)
+modules = (operators, checker, ui)
 
 
 def register():

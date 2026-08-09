@@ -1,9 +1,9 @@
 schema_version = "1.0.0"
 
 id = "uv_tech_tools"
-version = "0.7.0"
-name = "UV Tech Tools"
-tagline = "Tools for technical UV unwrapping workflows"
+version = "0.17.0"
+name = "TechArt Tools"
+tagline = "Technical art tools for UV unwrapping, texel density and mesh QA"
 maintainer = "Dzmitry Ivanou <id.cgtalk@gmail.com>"
 type = "add-on"
 
