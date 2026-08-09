@@ -4,10 +4,10 @@ Blender 5.2 addon (Extensions format) for technical UV unwrapping workflows.
 
 ## Install (development)
 
-1. Run `build.ps1` in PowerShell — it produces `dist/uv_tech_tools.zip`.
+1. Run `build.ps1` in PowerShell — it produces `dist/techart_tools.zip`.
 2. In Blender: Edit > Preferences > Get Extensions > dropdown (top right) > Install from Disk...
-3. Select `dist/uv_tech_tools.zip`.
-4. Open a UV Editor, press `N` for the sidebar, find the "UV Tech Tools" tab.
+3. Select `dist/techart_tools.zip`.
+4. Open a UV Editor, press `N` for the sidebar, find the "TechArt Tools" tab.
 
 ## Structure
 
