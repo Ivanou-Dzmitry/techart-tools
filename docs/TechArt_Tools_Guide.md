@@ -9,9 +9,11 @@ The tool lives in two places, each opening with an **Online Guide** button linki
 
 A **Tips** section appears at the bottom of the UV Editor tab after most actions, with a short, contextual explanation of what just happened and why it matters.
 
-![TechArt Tools panel: collapsed sections, UV Manipulation expanded, Checkers expanded](docs/images/techarttools01.jpg)
+![TechArt Tools panel: collapsed sections, UV Manipulation expanded, Checkers expanded](images/techarttools01.jpg)
 
 Source code: [github.com/Ivanou-Dzmitry/techart-tools](https://github.com/Ivanou-Dzmitry/techart-tools)
+
+Latest release / download: [github.com/Ivanou-Dzmitry/techart-tools/releases](https://github.com/Ivanou-Dzmitry/techart-tools/releases)
 
 ## Requirements and Limitations
 
@@ -77,7 +79,7 @@ Renders the current UV layout (edges over a translucent fill) to an image and ap
 
 Groups everything about measuring and controlling how texture space is used: overall UV utilization and per-face texel density.
 
-![Texel panel: Get / Set / Check Texel Density, and an example Tips message](docs/images/techarttools02.jpg)
+![Texel panel: Get / Set / Check Texel Density, and an example Tips message](images/techarttools02.jpg)
 
 ### UV Utilization
 
