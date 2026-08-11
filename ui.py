@@ -1,5 +1,4 @@
 import os
-import textwrap
 
 import bpy
 import bpy.utils.previews
@@ -27,9 +26,9 @@ def _on_checker_preview_change(self, context):
     bpy.ops.uvtt.set_checker(checker=self.uvtt_checker_preview)
 
 
-class UVTT_PT_main(bpy.types.Panel):
+class UVTT_PT_guide(bpy.types.Panel):
     bl_label = "TechArt Tools"
-    bl_idname = "UVTT_PT_main"
+    bl_idname = "UVTT_PT_guide"
     bl_space_type = "IMAGE_EDITOR"
     bl_region_type = "UI"
     bl_category = "TechArt Tools"
@@ -40,35 +39,59 @@ class UVTT_PT_main(bpy.types.Panel):
             operators.TECHART_URL
         )
 
+
+class UVTT_PT_uv_manipulation(bpy.types.Panel):
+    bl_label = "UV Manipulation"
+    bl_idname = "UVTT_PT_uv_manipulation"
+    bl_space_type = "IMAGE_EDITOR"
+    bl_region_type = "UI"
+    bl_category = "TechArt Tools"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        layout = self.layout
+
         box = layout.box()
         box.label(text="Rotate")
-        row = box.row(align=True)
-        row.operator("uvtt.rotate", text="-90").angle = -90.0
-        row.operator("uvtt.rotate", text="-45").angle = -45.0
-        row.operator("uvtt.rotate", text="+45").angle = 45.0
-        row.operator("uvtt.rotate", text="+90").angle = 90.0
+        grid = box.grid_flow(columns=2, align=True)
+        grid.operator("uvtt.rotate", text="-90").angle = -90.0
+        grid.operator("uvtt.rotate", text="-45").angle = -45.0
+        grid.operator("uvtt.rotate", text="+45").angle = 45.0
+        grid.operator("uvtt.rotate", text="+90").angle = 90.0
 
         box = layout.box()
         box.label(text="Scale")
-        row = box.row(align=True)
-        row.operator("uvtt.scale", text="x0.25").factor = 0.25
-        row.operator("uvtt.scale", text="x0.5").factor = 0.5
-        row.operator("uvtt.scale", text="x2").factor = 2.0
-        row.operator("uvtt.scale", text="4").factor = 4.0
+        grid = box.grid_flow(columns=2, align=True)
+        grid.operator("uvtt.scale", text="x0.25").factor = 0.25
+        grid.operator("uvtt.scale", text="x0.5").factor = 0.5
+        grid.operator("uvtt.scale", text="x2").factor = 2.0
+        grid.operator("uvtt.scale", text="4").factor = 4.0
 
         box = layout.box()
         box.label(text="Move UV")
-        row = box.row(align=True)
-        row.operator("uvtt.move", text="-1U").offset_u = -1.0
-        row.operator("uvtt.move", text="+1U").offset_u = 1.0
-        row.operator("uvtt.move", text="-1V").offset_v = -1.0
-        row.operator("uvtt.move", text="+1V").offset_v = 1.0
+        grid = box.grid_flow(columns=2, align=True)
+        grid.operator("uvtt.move", text="-1U").offset_u = -1.0
+        grid.operator("uvtt.move", text="+1U").offset_u = 1.0
+        grid.operator("uvtt.move", text="-1V").offset_v = -1.0
+        grid.operator("uvtt.move", text="+1V").offset_v = 1.0
 
         box = layout.box()
         box.label(text="Align")
         row = box.row(align=True)
         row.operator("uvtt.align", text="V-align").axis = "X"
         row.operator("uvtt.align", text="H-align").axis = "Y"
+
+
+class UVTT_PT_checkers(bpy.types.Panel):
+    bl_label = "Checkers"
+    bl_idname = "UVTT_PT_checkers"
+    bl_space_type = "IMAGE_EDITOR"
+    bl_region_type = "UI"
+    bl_category = "TechArt Tools"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        layout = self.layout
 
         box = layout.box()
         box.label(text="Checkers")
@@ -99,6 +122,18 @@ class UVTT_PT_main(bpy.types.Panel):
         row.operator("uvtt.set_matte", text="Matte")
         row.operator("uvtt.set_normal_check", text="NM")
         box.operator("uvtt.reset_material", text="Reset")
+
+
+class UVTT_PT_texel(bpy.types.Panel):
+    bl_label = "Texel"
+    bl_idname = "UVTT_PT_texel"
+    bl_space_type = "IMAGE_EDITOR"
+    bl_region_type = "UI"
+    bl_category = "TechArt Tools"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        layout = self.layout
 
         box = layout.box()
         box.label(text="UV Utilization")
@@ -172,16 +207,33 @@ class UVTT_PT_main(bpy.types.Panel):
             text=("Select (%d)" % tiny_uv_count) if tiny_uv_count else "Not checked",
         )
 
+
+class UVTT_PT_tips(bpy.types.Panel):
+    bl_label = "Tips"
+    bl_idname = "UVTT_PT_tips"
+    bl_space_type = "IMAGE_EDITOR"
+    bl_region_type = "UI"
+    bl_category = "TechArt Tools"
+
+    @classmethod
+    def poll(cls, context):
+        return bool(context.scene.get("uvtt_tip"))
+
+    def draw(self, context):
+        layout = self.layout
         tip = context.scene.get("uvtt_tip")
-        if tip:
-            box = layout.box()
-            box.label(text="Tips", icon="INFO")
-            col = box.column(align=True)
-            for line in textwrap.wrap(tip, width=40):
-                col.label(text=line)
+        col = layout.column(align=True)
+        for line in operators.wrap_text_for_region(context, tip):
+            col.label(text=line)
 
 
-classes = (UVTT_PT_main,)
+classes = (
+    UVTT_PT_guide,
+    UVTT_PT_uv_manipulation,
+    UVTT_PT_checkers,
+    UVTT_PT_texel,
+    UVTT_PT_tips,
+)
 
 
 def register():

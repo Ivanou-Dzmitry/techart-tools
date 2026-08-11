@@ -1,13 +1,15 @@
 # TechArt Tools
 
-**TechArt Tools** is a Blender 5.2+ extension that brings a set of technical-art checks and UV utilities into one panel. It is built for game-art and hard-surface workflows: cleaning up UVs, verifying texel density, spotting distortion and flipped normals, and running a quick QA pass on a model before it goes for feedback or export.
+**TechArt Tools** is a Blender 5.2+ extension that brings a set of technical-art checks and UV utilities into one place. It is built for game-art and hard-surface workflows: cleaning up UVs, verifying texel density, spotting distortion and flipped normals, and running a quick QA pass on a model before it goes for feedback or export.
 
-The tool lives in two places:
+The tool lives in two places, each opening with an **Online Guide** button linking back to this page:
 
-* **UV Editor sidebar (N-panel → TechArt Tools tab)** — UV transforms, checker textures, materials and texel density.
-* **3D Viewport sidebar (N-panel → TechArt Tools tab)** — the Checker, a 13-point QA checklist for the selected object(s).
+* **UV Editor sidebar (N-panel → TechArt Tools tab)** — three collapsible sections: **UV Manipulation** (transforms), **Checkers** (checker textures, Render UV, materials) and **Texel** (UV utilization, texel density). Collapsed by default so the sidebar stays short — expand only what you need.
+* **3D Viewport sidebar (N-panel → TechArt Tools tab)** — the **Checker**, a 13-point QA checklist for the selected object(s).
 
-Both panels open with an **Online Guide** button linking back to this page.
+A **Tips** section appears at the bottom of the UV Editor tab after most actions, with a short, contextual explanation of what just happened and why it matters.
+
+Source code: [github.com/Ivanou-Dzmitry/techart-tools](https://github.com/Ivanou-Dzmitry/techart-tools)
 
 ## Requirements and Limitations
 
@@ -18,7 +20,7 @@ Both panels open with an **Online Guide** button linking back to this page.
 
 ---
 
-## UV Tools
+## UV Manipulation
 
 ### Rotate
 
@@ -60,9 +62,7 @@ Retiles the active checker to simulate a texture resolution: **128 / 256 / 512 /
 
 Renders the current UV layout (edges over a translucent fill) to an image and applies it to the object as a texture, so you can see the UV layout directly on the model without opening the UV Editor — useful for spotting missing or broken UVs at a glance.
 
----
-
-## Material
+### Material
 
 * **Gloss** — assigns a glossy material (low roughness). Sharp specular highlights make it easier to spot faceting and other surface artifacts.
 * **Matte** — assigns a matte material (high roughness). Neutral and easy on the eyes — good for a general shape and silhouette review.
@@ -71,7 +71,11 @@ Renders the current UV layout (edges over a translucent fill) to an image and ap
 
 ---
 
-## UV Utilization
+## Texel
+
+Groups everything about measuring and controlling how texture space is used: overall UV utilization and per-face texel density.
+
+### UV Utilization
 
 Reports what percentage of the 0–1 UV tile is actually covered by the mesh's UVs. The check renders the UV layout to an opaque-filled image and counts non-transparent pixels, so overlapping islands are **not** double-counted — a plain polygon-area sum would over-report coverage whenever UVs intentionally overlap (e.g. mirrored parts sharing texture space).
 
@@ -88,13 +92,11 @@ A thumbnail preview of the coverage mask is shown alongside the result. Rough gu
 
 Near-zero coverage almost always means the UV islands are positioned outside the 0–1 tile — this check only counts what falls inside it.
 
----
-
-## Texel Density
+### Texel Density
 
 Texel density is the number of texture pixels that map onto one meter of real-world surface (px/m). It depends on object scale, texture resolution and UV area, and it is what tells you whether a texture will look sharp or blurry at a given distance.
 
-### Get Texel Density
+#### Get Texel Density
 
 Pick a **Map size** (64 up to 8K) and press **Get Texel**:
 
@@ -103,13 +105,13 @@ Pick a **Map size** (64 up to 8K) and press **Get Texel**:
 
 The result is shown in px/m and, if "Use texel value when checking texel density" is enabled, is automatically carried over as the target for **Check Texel Density** below.
 
-### Set Texel Density
+#### Set Texel Density
 
 Enter a **Desired texel (px/m)** and press **Set Texel**. TechArt Tools measures the current texel density of the selected faces (or the whole object if nothing is selected) and scales their UVs around the median so the result matches the target. Works with a multi-object Edit Mode selection.
 
 Increasing texel density enlarges the UV footprint — if the texture is not meant to tile, double-check afterwards that the islands still fit inside the 0–1 UV space.
 
-### Check Texel Density
+#### Check Texel Density
 
 Colors every polygon of the selected object(s) by how close its texel density is to the target:
 
@@ -119,14 +121,14 @@ Colors every polygon of the selected object(s) by how close its texel density is
 
 **Range +/- (%)** sets the allowed tolerance (1–30%, default 10%). Example: target texel 200, range 10% → anything between 180 and 220 counts as in range.
 
-#### Additional Checks
+##### Additional Checks
 
 * **Tiny Polygons** — flags faces at or below a given world-space area (m²). Faces this small are usually invisible in the final render and can often be merged or removed.
 * **Tiny UV Shells** — flags faces whose UV footprint is at or below a given size in pixels (relative to the selected Map size). There isn't enough texture space there to show any detail.
 
 Each flagged category shows a **Select** button to jump straight to the offending faces.
 
-#### Clean Check
+##### Clean Check
 
 Removes the check material and clears the results.
 

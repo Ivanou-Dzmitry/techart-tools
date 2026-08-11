@@ -1,5 +1,4 @@
 import os
-import textwrap
 
 import bmesh
 import bpy
@@ -536,7 +535,7 @@ class UVTT_PT_checker(bpy.types.Panel):
             box = layout.box()
             box.label(text=item.label, icon=_status_icon(item.status))
             col = box.column(align=True)
-            for line in textwrap.wrap(item.message, width=40):
+            for line in operators.wrap_text_for_region(context, item.message):
                 col.label(text=line)
             if item.fix_id:
                 box.operator(item.fix_id, text="Fix")

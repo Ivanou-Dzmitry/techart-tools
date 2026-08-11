@@ -1,6 +1,7 @@
 import math
 import os
 import random
+import textwrap
 
 import bmesh
 import bpy
@@ -12,6 +13,14 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
+
+
+def wrap_text_for_region(context, text, min_chars=20):
+    region = context.region
+    width_px = region.width if region else 300
+    ui_scale = context.preferences.system.ui_scale
+    chars = max(min_chars, int(width_px / (6.5 * ui_scale)) - 6)
+    return textwrap.wrap(text, width=chars)
 
 CHECKERS = (
     ("STANDARD", "Standard", "checker_standard.tga"),
@@ -1371,6 +1380,7 @@ def register():
         default=0.0001,
         min=0.00001,
         max=1000.0,
+        precision=5,
     )
     bpy.types.Scene.uvtt_tiny_uv_px = bpy.props.IntProperty(
         name="Tiny UV Shells (px)",
