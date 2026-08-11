@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "uv_tech_tools"
-version = "0.18.2"
+version = "0.26.0"
 name = "TechArt Tools"
 tagline = "Technical art tools for UV unwrapping, texel density and mesh QA"
 maintainer = "Dzmitry Ivanou <id.cgtalk@gmail.com>"

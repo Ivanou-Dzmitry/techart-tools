@@ -52,7 +52,7 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
         layout = self.layout
 
         box = layout.box()
-        box.label(text="Rotate")
+        box.label(text="Rotate", icon="CON_ROTLIKE")
         grid = box.grid_flow(columns=2, align=True)
         grid.operator("uvtt.rotate", text="-90").angle = -90.0
         grid.operator("uvtt.rotate", text="-45").angle = -45.0
@@ -60,7 +60,7 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
         grid.operator("uvtt.rotate", text="+90").angle = 90.0
 
         box = layout.box()
-        box.label(text="Scale")
+        box.label(text="Scale", icon="CON_SIZELIKE")
         grid = box.grid_flow(columns=2, align=True)
         grid.operator("uvtt.scale", text="x0.25").factor = 0.25
         grid.operator("uvtt.scale", text="x0.5").factor = 0.5
@@ -68,7 +68,7 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
         grid.operator("uvtt.scale", text="4").factor = 4.0
 
         box = layout.box()
-        box.label(text="Move UV")
+        box.label(text="Move UV", icon="CON_LOCLIKE")
         grid = box.grid_flow(columns=2, align=True)
         grid.operator("uvtt.move", text="-1U").offset_u = -1.0
         grid.operator("uvtt.move", text="+1U").offset_u = 1.0
@@ -76,7 +76,7 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
         grid.operator("uvtt.move", text="+1V").offset_v = 1.0
 
         box = layout.box()
-        box.label(text="Align")
+        box.label(text="Align", icon="OBJECT_ORIGIN")
         row = box.row(align=True)
         row.operator("uvtt.align", text="V-align").axis = "X"
         row.operator("uvtt.align", text="H-align").axis = "Y"
@@ -94,10 +94,11 @@ class UVTT_PT_checkers(bpy.types.Panel):
         layout = self.layout
 
         box = layout.box()
-        box.label(text="Checkers")
+        box.label(text="Checkers", icon="TEXTURE")
         box.template_icon_view(
             context.scene, "uvtt_checker_preview", show_labels=True, scale=5.0
         )
+        box.operator("uvtt.reset_material", text="Remove Checker", icon="LOOP_BACK")
 
         box.label(text="Texture Size")
         col = box.column(align=True)
@@ -113,15 +114,7 @@ class UVTT_PT_checkers(bpy.types.Panel):
 
         box = layout.box()
         box.label(text="Render UV")
-        box.operator("uvtt.render_uv", text="Render")
-
-        box = layout.box()
-        box.label(text="Material")
-        row = box.row(align=True)
-        row.operator("uvtt.set_gloss", text="Gloss")
-        row.operator("uvtt.set_matte", text="Matte")
-        row.operator("uvtt.set_normal_check", text="NM")
-        box.operator("uvtt.reset_material", text="Reset")
+        box.operator("uvtt.render_uv", text="Render", icon="RENDER_STILL")
 
 
 class UVTT_PT_texel(bpy.types.Panel):
@@ -136,8 +129,8 @@ class UVTT_PT_texel(bpy.types.Panel):
         layout = self.layout
 
         box = layout.box()
-        box.label(text="UV Utilization")
-        box.operator("uvtt.check_uv_utilization", text="Check")
+        box.label(text="UV Utilization", icon="UV")
+        box.operator("uvtt.check_uv_utilization", text="Check", icon="VIEWZOOM")
         utilization = context.scene.get("uvtt_uv_utilization")
         if utilization is not None:
             box.label(text="Coverage: %.1f%%" % utilization)
@@ -151,7 +144,7 @@ class UVTT_PT_texel(bpy.types.Panel):
         box.label(text="Map size (px)")
         row = box.row(align=True)
         row.prop(context.scene, "uvtt_map_size", text="")
-        row.operator("uvtt.get_texel", text="Get Texel")
+        row.operator("uvtt.get_texel", text="Get Texel", icon="VIEWZOOM")
         box.prop(context.scene, "uvtt_texel_value", text="Texel (px/m)")
         box.prop(context.scene, "uvtt_use_measured_texel")
 
@@ -161,15 +154,15 @@ class UVTT_PT_texel(bpy.types.Panel):
         box.label(text="Desired texel (px/m)")
         row = box.row(align=True)
         row.prop(context.scene, "uvtt_desired_texel", text="")
-        row.operator("uvtt.set_texel", text="Set Texel")
+        row.operator("uvtt.set_texel", text="Set Texel", icon="CON_SIZELIKE")
 
         box = layout.box()
         box.label(text="Check Texel Density")
         box.label(text="Using Texel: %d px/m" % int(context.scene.uvtt_texel_value))
         box.prop(context.scene, "uvtt_texel_range")
         row = box.row(align=True)
-        row.operator("uvtt.check_texel", text="Check Texel")
-        row.operator("uvtt.clean_texel_check", text="Clean Check")
+        row.operator("uvtt.check_texel", text="Check Texel", icon="CHECKMARK")
+        row.operator("uvtt.clean_texel_check", text="Clean Check", icon="TRASH")
 
         in_range = context.scene.get("uvtt_texel_inrange")
         if in_range is not None:
@@ -194,6 +187,7 @@ class UVTT_PT_texel(bpy.types.Panel):
         sub.operator(
             "uvtt.select_tiny_polygons",
             text=("Select (%d)" % tiny_poly_count) if tiny_poly_count else "Not checked",
+            icon="RESTRICT_SELECT_OFF",
         )
 
         box.label(text="Tiny UV Shells (px)")
@@ -205,6 +199,7 @@ class UVTT_PT_texel(bpy.types.Panel):
         sub.operator(
             "uvtt.select_tiny_uv",
             text=("Select (%d)" % tiny_uv_count) if tiny_uv_count else "Not checked",
+            icon="RESTRICT_SELECT_OFF",
         )
 
 

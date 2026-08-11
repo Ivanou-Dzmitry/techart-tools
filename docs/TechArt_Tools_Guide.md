@@ -4,10 +4,10 @@
 
 The tool lives in two places, each opening with an **Online Guide** button linking back to this page:
 
-* **UV Editor sidebar (N-panel → TechArt Tools tab)** — three collapsible sections: **UV Manipulation** (transforms), **Checkers** (checker textures, Render UV, materials) and **Texel** (UV utilization, texel density). Collapsed by default so the sidebar stays short — expand only what you need.
-* **3D Viewport sidebar (N-panel → TechArt Tools tab)** — the **Checker**, a 13-point QA checklist for the selected object(s).
+* **UV Editor sidebar (N-panel → TechArt Tools tab)** — three collapsible sections: **UV Manipulation** (transforms), **Checkers** (checker textures, Render UV) and **Texel** (UV utilization, texel density).
+* **3D Viewport sidebar (N-panel → TechArt Tools tab)** — six collapsible sections: **Preparation** (batch mesh/scene cleanup), **Statistics** (mesh/UV stats and a bounding-box dimension overlay), **Material** (Gloss/Matte/NM check materials), **Checker** (13-point QA checklist), **Tools** (FBX/OBJ export, intersection check, viewport preview render) and **Tips**.
 
-A **Tips** section appears at the bottom of the UV Editor tab after most actions, with a short, contextual explanation of what just happened and why it matters.
+All sections are collapsed by default so the sidebar stays short — expand only what you need. A **Tips** section appears after most actions with a short, contextual explanation of what just happened and why it matters.
 
 ![TechArt Tools panel: collapsed sections, UV Manipulation expanded, Checkers expanded](images/techarttools01.jpg)
 
@@ -21,6 +21,7 @@ Latest release / download: [github.com/Ivanou-Dzmitry/techart-tools/releases](ht
 * Most UV operations require Edit Mode with an active UV map.
 * The Checker (QA checklist) requires Object Mode.
 * Some functions work on a single object, others accept a multi-object selection — this is noted per feature below.
+* Export, Render Preview and the bulk Preparation/Fix actions may prompt to save the file first if there are unsaved changes.
 
 ---
 
@@ -66,12 +67,7 @@ Retiles the active checker to simulate a texture resolution: **128 / 256 / 512 /
 
 Renders the current UV layout (edges over a translucent fill) to an image and applies it to the object as a texture, so you can see the UV layout directly on the model without opening the UV Editor — useful for spotting missing or broken UVs at a glance.
 
-### Material
-
-* **Gloss** — assigns a glossy material (low roughness). Sharp specular highlights make it easier to spot faceting and other surface artifacts.
-* **Matte** — assigns a matte material (high roughness). Neutral and easy on the eyes — good for a general shape and silhouette review.
-* **NM** — assigns a test normal map with readable "UP" / "DOWN" text baked into it. This reveals a flipped Y channel or mirrored UVs at a glance — something a generic bump pattern cannot show. Replace it with your own normal map once you have one.
-* **Reset** — removes all materials from the selected object(s).
+A **Remove Checker** button below the checker picker clears it — it restores whatever material was on the object before (see **Material**, in the 3D Viewport panel, for how that works).
 
 ---
 
@@ -140,9 +136,34 @@ Removes the check material and clears the results.
 
 ---
 
-## Checker (QA Checklist)
+## 3D Viewport Panel
 
-Found in the **3D Viewport** sidebar. Press **Run Check** to evaluate the selected object(s) (Object Mode) against 13 checks, each shown with a colored status and, where it can be automated safely, a **Fix** button.
+Six collapsible sections, all under the **TechArt Tools** tab in the 3D Viewport sidebar (N-panel). Export, Render Preview and the bulk Preparation/Fix actions derive their output location from the saved `.blend` file: if there are unsaved changes they offer a **Save & Continue / Cancel** prompt first, and if the file has never been saved at all they just warn, since there is no path to derive an output from.
+
+![3D Viewport panel: Preparation, Statistics with results and dimension overlay, and Checker running with individual check results](images/techarttools03.jpg)
+
+### Preparation
+
+* **Prepare Mesh** — batch-cleans the selected object(s): unhides the object and any hidden vertices/edges/faces, clears "unselectable" locking, resets scale and rotation (Apply Transform), assigns a `<name>_mat` material to any object that has none, and switches backface culling on for all of its materials.
+* **Prepare Scene** — batch-cleans the whole scene: sets units to Metric with a scale of 1.0, unhides every object and collection, and makes texture paths relative to the saved file.
+
+### Statistics
+
+* **Get Statistics** — reports mesh object count, polygons, triangles, vertices, armature bones (if any), UV-vertices, materials, whether UVs are within [0,1], UV map count, UV shell (island) count, and UV utilization (average and lowest, across a multi-object selection) — plus the same UV coverage preview thumbnail as the Texel panel's UV Utilization check, if one has been computed.
+* **Dimension Overlay** (Show/Hide Dimension) — draws a live bounding-box wireframe with Width/Length/Height labels directly in the 3D Viewport for the selected object(s), following the current selection. A label turns red on any axis where the object has a non-1.0 scale, since the displayed size doesn't account for that transform.
+
+### Material
+
+Assigns the same check materials as the UV Editor's Checkers panel, but from the 3D Viewport:
+
+* **Gloss** — assigns a glossy material (low roughness). Sharp specular highlights make it easier to spot faceting and other surface artifacts.
+* **Matte** — assigns a matte material (high roughness). Neutral and easy on the eyes — good for a general shape and silhouette review.
+* **NM** — assigns a test normal map with readable "UP" / "DOWN" text baked into it, revealing a flipped Y channel or mirrored UVs at a glance.
+* **Reset** — restores whatever material was on the object *before* any check material (checker, Gloss, Matte, NM, Render UV, Check Texel Density) was applied, instead of just clearing the slot. TechArt Tools remembers the original the first time one of those is assigned.
+
+### Checker (QA Checklist)
+
+Press **Run Check** to evaluate the selected object(s) (Object Mode) against 13 checks, each shown with a colored status and, where it can be automated safely, a **Fix** button.
 
 | # | Check | Fixable |
 | :---- | :---- | :---- |
@@ -160,7 +181,17 @@ Found in the **3D Viewport** sidebar. Press **Run Check** to evaluate the select
 | 12 | UV utilization — average and lowest coverage across the selection (50% / 75% thresholds). | Manual |
 | 13 | Material slots per object — informational, more than one is unusual for a simple model. | Manual |
 
-A short summary ("N / 13 checks passed") is shown at the top of the results.
+A short summary ("N / 13 checks passed") is shown at the top of the results. **Open Log** writes the full results, with a timestamp, to a Text data-block named `TechArt_Checker_Log` and prints the same to the console — open a Text Editor and select it, or use Window → Toggle System Console, to read it.
+
+### Tools
+
+* **Export FBX / Export OBJ** — exports the selected object(s) next to the saved `.blend` file (`<filename>.fbx` / `<filename>.obj`). A hard, minimal export: geometry, UV and normals only (FBX also includes tangent space) — no animation, cameras, lights or embedded textures, with `-Z Forward` / `Y Up` axes and triangulated output.
+* **Check Intersection** — finds open (boundary) edges on the selected object(s) and traces them with a bright red tube (**Depth (mm)**, default 10). Where two parts are meant to overlap — a bolt into a block, for example — a visible red tube means the intersection there is too shallow. **Clean** removes the helper geometry.
+* **Render Preview** — frames the selected object(s) (or the whole scene, if nothing is selected) in the current Perspective viewport and saves a snapshot as `<filename>_preview.jpg` next to the `.blend` file.
+
+### Tips
+
+A short, static explanation of what the Checker and Preparation sections do, plus a one-line summary after the last Run Check (what passed, what needs attention).
 
 ---
 

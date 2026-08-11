@@ -394,12 +394,21 @@ def _set_material_preview_shading(context):
                 space.shading.type = "MATERIAL"
 
 
+def _remember_original_material(obj):
+    current = obj.data.materials[0] if obj.data.materials else None
+    is_ours = current is not None and current.get("uvtt_generated")
+    if not obj.uvtt_material_saved and not is_ours:
+        obj.uvtt_original_material = current
+        obj.uvtt_material_saved = True
+
+
 def _assign_material_to_selection(context, mat):
     objects = context.selected_objects or [context.edit_object]
     applied = False
     for obj in objects:
         if obj is None or obj.type != "MESH":
             continue
+        _remember_original_material(obj)
         if obj.data.materials:
             obj.data.materials[0] = mat
         else:
@@ -452,6 +461,7 @@ def _checker_material(image, tileable):
     if bsdf is not None:
         _ensure_link(links, tex_node.outputs["Color"], bsdf.inputs["Base Color"])
 
+    mat["uvtt_generated"] = True
     mat["uvtt_checker"] = True
     mat["uvtt_tileable"] = tileable
     return mat
@@ -632,6 +642,7 @@ def _solid_check_material(name, base_color, roughness):
         bsdf.inputs["Roughness"].default_value = roughness
         bsdf.inputs["Metallic"].default_value = 0.0
 
+    mat["uvtt_generated"] = True
     return mat
 
 
@@ -687,6 +698,7 @@ def _normal_check_material(image):
     if bsdf is not None:
         _ensure_link(links, normal_map_node.outputs["Normal"], bsdf.inputs["Normal"])
 
+    mat["uvtt_generated"] = True
     return mat
 
 
@@ -786,7 +798,7 @@ class UVTT_OT_set_normal_check(bpy.types.Operator):
 
 
 class UVTT_OT_reset_material(bpy.types.Operator):
-    """Remove all materials from the selected objects"""
+    """Remove the check material from the selected objects, restoring whatever material was there before"""
 
     bl_idname = "uvtt.reset_material"
     bl_label = "Reset Material"
@@ -803,7 +815,21 @@ class UVTT_OT_reset_material(bpy.types.Operator):
         for obj in objects:
             if obj.type != "MESH":
                 continue
-            obj.data.materials.clear()
+
+            if obj.uvtt_material_saved:
+                original = obj.uvtt_original_material
+                if original is not None:
+                    if obj.data.materials:
+                        obj.data.materials[0] = original
+                    else:
+                        obj.data.materials.append(original)
+                else:
+                    obj.data.materials.clear()
+                obj.uvtt_original_material = None
+                obj.uvtt_material_saved = False
+            else:
+                obj.data.materials.clear()
+
             applied = True
 
         if not applied:
@@ -1070,6 +1096,7 @@ def _texel_check_material():
     if bsdf is not None:
         _ensure_link(links, attr_node.outputs["Color"], bsdf.inputs["Base Color"])
 
+    mat["uvtt_generated"] = True
     return mat
 
 
@@ -1158,6 +1185,7 @@ class UVTT_OT_check_texel(bpy.types.Operator):
 
         mat = _texel_check_material()
         for obj in objects:
+            _remember_original_material(obj)
             if obj.data.materials:
                 obj.data.materials[0] = mat
             else:
@@ -1389,8 +1417,14 @@ def register():
         max=9,
     )
 
+    bpy.types.Object.uvtt_original_material = bpy.props.PointerProperty(type=bpy.types.Material)
+    bpy.types.Object.uvtt_material_saved = bpy.props.BoolProperty(default=False)
+
 
 def unregister():
+    del bpy.types.Object.uvtt_material_saved
+    del bpy.types.Object.uvtt_original_material
+
     del bpy.types.Scene.uvtt_tiny_uv_px
     del bpy.types.Scene.uvtt_tiny_poly_area
     del bpy.types.Scene.uvtt_texel_range
