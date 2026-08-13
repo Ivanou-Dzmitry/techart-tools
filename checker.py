@@ -985,6 +985,21 @@ def _remove_dimension_handlers():
         _dimension_state["pixel_handle"] = None
 
 
+class UVTT_PT_viewport_guide(bpy.types.Panel):
+    bl_label = "TechArt Tools"
+    bl_idname = "UVTT_PT_viewport_guide"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "TechArt Tools"
+
+    def draw(self, context):
+        self.bl_label = "TechArt Tools v%s" % operators.TECHART_VERSION
+        layout = self.layout
+        layout.operator("wm.url_open", text="TechArt Tools Online Guide", icon="URL").url = (
+            operators.TECHART_URL
+        )
+
+
 class UVTT_PT_prepare(bpy.types.Panel):
     bl_label = "Preparation"
     bl_idname = "UVTT_PT_prepare"
@@ -994,9 +1009,6 @@ class UVTT_PT_prepare(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.operator("wm.url_open", text="TechArt Tools Online Guide", icon="URL").url = (
-            operators.TECHART_URL
-        )
 
         box = layout.box()
         box.label(text="Mesh")
@@ -1500,6 +1512,7 @@ classes = (
     UVTT_OT_check_intersection,
     UVTT_OT_clean_intersection,
     UVTT_OT_render_preview,
+    UVTT_PT_viewport_guide,
     UVTT_PT_prepare,
     UVTT_PT_statistics,
     UVTT_PT_material,

@@ -34,6 +34,7 @@ class UVTT_PT_guide(bpy.types.Panel):
     bl_category = "TechArt Tools"
 
     def draw(self, context):
+        self.bl_label = "TechArt Tools v%s" % operators.TECHART_VERSION
         layout = self.layout
         layout.operator("wm.url_open", text="TechArt Tools Online Guide", icon="URL").url = (
             operators.TECHART_URL
@@ -151,6 +152,8 @@ class UVTT_PT_texel(bpy.types.Panel):
         box = layout.box()
         box.label(text="Set Texel Density")
         box.label(text="Map size: %spx" % context.scene.uvtt_map_size)
+        box.prop(context.scene, "uvtt_texel_set_method", text="Mode")
+        box.prop(context.scene, "uvtt_texel_scale_anchor", text="Scale Anchor (UV)")
         box.label(text="Desired texel (px/m)")
         row = box.row(align=True)
         row.prop(context.scene, "uvtt_desired_texel", text="")

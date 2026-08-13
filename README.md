@@ -107,7 +107,10 @@ The result is shown in px/m and, if "Use texel value when checking texel density
 
 #### Set Texel Density
 
-Enter a **Desired texel (px/m)** and press **Set Texel**. TechArt Tools measures the current texel density of the selected faces (or the whole object if nothing is selected) and scales their UVs around the median so the result matches the target. Works with a multi-object Edit Mode selection.
+Enter a **Desired texel (px/m)** and press **Set Texel**. TechArt Tools measures the current texel density of the selected faces (or the whole object if nothing is selected) and scales their UVs so the result matches the target. Works with a multi-object Edit Mode selection.
+
+* **Mode** — **Average** (default) scales the whole selection together by one factor, based on its combined average texel density, preserving the relative size differences between islands. **Each Cluster** finds every UV island in the selection (grouped by UV continuity) and scales each one individually to hit the target — useful when different islands start at different densities and all need to match exactly.
+* **Scale Anchor (UV)** — the pivot point for the scale: **Selection** (the median of what's being scaled — the whole selection for Average, or each cluster's own median for Each Cluster), **Center** / **Left Bottom** / **Left Top** / **Right Bottom** / **Right Top** of the 0–1 UV tile, or **2D Cursor** (the UV Editor's 2D cursor position). With a fixed point instead of Selection, clusters scale from that shared point in Each Cluster mode, so they spread apart or converge as they resize, not just grow in place.
 
 Increasing texel density enlarges the UV footprint — if the texture is not meant to tile, double-check afterwards that the islands still fit inside the 0–1 UV space.
 

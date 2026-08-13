@@ -13,6 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
+TECHART_VERSION = "0.27.2"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -104,11 +105,85 @@ def _texel_band_description(texel):
     return "unrealistically high"
 
 
-def _scale_uv_loops(uv_layer, loops, factor):
-    pivot = _uv_pivot(uv_layer, loops)
+def _scale_uv_loops_around(uv_layer, loops, factor, pivot):
     for loop in loops:
         luv = loop[uv_layer]
         luv.uv = pivot + (luv.uv - pivot) * factor
+
+
+def _scale_uv_loops(uv_layer, loops, factor):
+    pivot = _uv_pivot(uv_layer, loops)
+    _scale_uv_loops_around(uv_layer, loops, factor, pivot)
+
+
+def _uv_islands_from_faces(faces, uv_layer):
+    """Group faces into UV-continuous clusters (islands), restricted to `faces`."""
+    face_set = set(faces)
+    visited = set()
+    islands = []
+
+    def edge_uv_key(face, edge):
+        for loop in face.loops:
+            if loop.edge == edge:
+                a = loop[uv_layer].uv
+                b = loop.link_loop_next[uv_layer].uv
+                return frozenset(
+                    {(round(a.x, 5), round(a.y, 5)), (round(b.x, 5), round(b.y, 5))}
+                )
+        return None
+
+    for start_face in faces:
+        if start_face.index in visited:
+            continue
+        stack = [start_face]
+        visited.add(start_face.index)
+        island = [start_face]
+        while stack:
+            face = stack.pop()
+            for edge in face.edges:
+                linked = [f for f in edge.link_faces if f in face_set]
+                if len(linked) != 2:
+                    continue
+                other = linked[0] if linked[1] == face else linked[1]
+                if other.index in visited:
+                    continue
+                if edge_uv_key(face, edge) == edge_uv_key(other, edge):
+                    visited.add(other.index)
+                    stack.append(other)
+                    island.append(other)
+        islands.append(island)
+
+    return islands
+
+
+UV_ANCHORS = (
+    ("SELECTION", "Selection", "Pivot around the median of the scaled UVs"),
+    ("UV_CENTER", "Center", "Pivot at the center of the 0-1 UV tile"),
+    ("UV_LEFT_BOTTOM", "Left Bottom", "Pivot at the [0,0] corner of the UV tile"),
+    ("UV_LEFT_TOP", "Left Top", "Pivot at the [0,1] corner of the UV tile"),
+    ("UV_RIGHT_BOTTOM", "Right Bottom", "Pivot at the [1,0] corner of the UV tile"),
+    ("UV_RIGHT_TOP", "Right Top", "Pivot at the [1,1] corner of the UV tile"),
+    ("CURSOR_2D", "2D Cursor", "Pivot at the UV Editor's 2D cursor position"),
+)
+
+
+def _uv_anchor_point(context, anchor, uv_layer, loops):
+    if anchor == "UV_CENTER":
+        return Vector((0.5, 0.5))
+    if anchor == "UV_LEFT_BOTTOM":
+        return Vector((0.0, 0.0))
+    if anchor == "UV_LEFT_TOP":
+        return Vector((0.0, 1.0))
+    if anchor == "UV_RIGHT_BOTTOM":
+        return Vector((1.0, 0.0))
+    if anchor == "UV_RIGHT_TOP":
+        return Vector((1.0, 1.0))
+    if anchor == "CURSOR_2D":
+        space = context.space_data
+        if space is not None and space.type == "IMAGE_EDITOR":
+            return Vector(space.cursor_location)
+        return Vector((0.5, 0.5))
+    return _uv_pivot(uv_layer, loops)
 
 
 def _bmesh_for_object(context, obj):
@@ -1022,6 +1097,8 @@ class UVTT_OT_set_texel(bpy.types.Operator):
     def execute(self, context):
         map_size = int(context.scene.uvtt_map_size)
         desired_texel = context.scene.uvtt_desired_texel
+        method = context.scene.uvtt_texel_set_method
+        anchor_mode = context.scene.uvtt_texel_scale_anchor
 
         any_changed = False
 
@@ -1035,20 +1112,38 @@ class UVTT_OT_set_texel(bpy.types.Operator):
             if not faces:
                 continue
 
-            total_uv_area = sum(_face_uv_area(f, uv_layer) for f in faces)
-            total_geo_area = sum(_world_face_area(f, obj.matrix_world) for f in faces)
-            if total_geo_area <= 0.0 or total_uv_area <= 0.0:
-                continue
+            groups = _uv_islands_from_faces(faces, uv_layer) if method == "EACH" else [faces]
 
-            current_texel = math.sqrt(total_uv_area / total_geo_area) * map_size
-            if current_texel <= 0.0:
-                continue
+            shared_anchor = None
+            if anchor_mode != "SELECTION" or method == "AVERAGE":
+                all_loops = [loop for face in faces for loop in face.loops]
+                shared_anchor = _uv_anchor_point(context, anchor_mode, uv_layer, all_loops)
 
-            loops = [loop for face in faces for loop in face.loops]
-            _scale_uv_loops(uv_layer, loops, desired_texel / current_texel)
+            changed_this_object = False
 
-            bmesh.update_edit_mesh(obj.data)
-            any_changed = True
+            for group_faces in groups:
+                total_uv_area = sum(_face_uv_area(f, uv_layer) for f in group_faces)
+                total_geo_area = sum(_world_face_area(f, obj.matrix_world) for f in group_faces)
+                if total_geo_area <= 0.0 or total_uv_area <= 0.0:
+                    continue
+
+                current_texel = math.sqrt(total_uv_area / total_geo_area) * map_size
+                if current_texel <= 0.0:
+                    continue
+
+                group_loops = [loop for face in group_faces for loop in face.loops]
+
+                if anchor_mode == "SELECTION" and method == "EACH":
+                    pivot = _uv_pivot(uv_layer, group_loops)
+                else:
+                    pivot = shared_anchor
+
+                _scale_uv_loops_around(uv_layer, group_loops, desired_texel / current_texel, pivot)
+                changed_this_object = True
+
+            if changed_this_object:
+                bmesh.update_edit_mesh(obj.data)
+                any_changed = True
 
         if not any_changed:
             self.report({"WARNING"}, "Nothing to set texel on")
@@ -1397,6 +1492,22 @@ def register():
         default=400.0,
         min=1.0,
     )
+    bpy.types.Scene.uvtt_texel_set_method = bpy.props.EnumProperty(
+        name="Mode",
+        description="Set Texel Density: scale each UV cluster to the target individually, "
+        "or scale the whole selection together by its average texel density",
+        items=(
+            ("EACH", "Each Cluster", "Scale every UV island in the selection to the target individually"),
+            ("AVERAGE", "Average", "Scale the whole selection together by its average texel density"),
+        ),
+        default="AVERAGE",
+    )
+    bpy.types.Scene.uvtt_texel_scale_anchor = bpy.props.EnumProperty(
+        name="Scale Anchor",
+        description="Pivot point used when scaling UVs to the target texel density",
+        items=UV_ANCHORS,
+        default="SELECTION",
+    )
     bpy.types.Scene.uvtt_texel_range = bpy.props.IntProperty(
         name="Range +/- (%)",
         default=10,
@@ -1428,6 +1539,8 @@ def unregister():
     del bpy.types.Scene.uvtt_tiny_uv_px
     del bpy.types.Scene.uvtt_tiny_poly_area
     del bpy.types.Scene.uvtt_texel_range
+    del bpy.types.Scene.uvtt_texel_scale_anchor
+    del bpy.types.Scene.uvtt_texel_set_method
     del bpy.types.Scene.uvtt_desired_texel
     del bpy.types.Scene.uvtt_use_measured_texel
     del bpy.types.Scene.uvtt_texel_value
