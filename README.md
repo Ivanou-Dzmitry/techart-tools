@@ -186,7 +186,7 @@ A short summary ("N / 13 checks passed") is shown at the top of the results. **O
 
 ### Tools
 
-* **Export FBX / Export OBJ** — exports the selected object(s) next to the saved `.blend` file (`<filename>.fbx` / `<filename>.obj`). A hard, minimal export: geometry, UV and normals only (FBX also includes tangent space) — no animation, cameras, lights or embedded textures, with `-Z Forward` / `Y Up` axes and triangulated output.
+* **Export FBX / Export OBJ** — exports the selected object(s) next to the saved `.blend` file (`<filename>.fbx` / `<filename>.obj`). A hard, minimal export: geometry, UV and normals only (FBX also includes tangent space) — no animation, cameras, lights or embedded textures, with `-Z Forward` / `Y Up` axes and triangulated output. **Use mesh name as file name** (off by default) names the file after the selected mesh instead of the `.blend` file — handy when a file has several meshes and you only want to export one at a time.
 * **Check Intersection** — finds open (boundary) edges on the selected object(s) and traces them with a bright red tube (**Depth (mm)**, default 10). Where two parts are meant to overlap — a bolt into a block, for example — a visible red tube means the intersection there is too shallow. **Clean** removes the helper geometry.
 * **Render Preview** — frames the selected object(s) (or the whole scene, if nothing is selected) in the current Perspective viewport and saves a snapshot as `<filename>_preview.jpg` next to the `.blend` file.
 

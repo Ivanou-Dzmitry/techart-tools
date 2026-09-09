@@ -1102,11 +1102,29 @@ class UVTT_PT_checker(bpy.types.Panel):
                 box.operator(item.fix_id, text="Fix", icon="TOOL_SETTINGS")
 
 
-def _export_filepath(extension):
+def _safe_filename(name):
+    invalid = '<>:"/\\|?*'
+    cleaned = "".join("_" if c in invalid else c for c in name).strip()
+    return cleaned or "export"
+
+
+def _export_name(context):
+    if not context.scene.uvtt_export_use_mesh_name:
+        return None
+    objects = _checker_objects(context)
+    if not objects:
+        return None
+    active = context.active_object
+    obj = active if active in objects else objects[0]
+    return _safe_filename(obj.name)
+
+
+def _export_filepath(extension, name_override=None):
     if not bpy.data.filepath:
         return None
-    base = os.path.splitext(bpy.data.filepath)[0]
-    return base + extension
+    directory = os.path.dirname(bpy.data.filepath)
+    base_name = name_override or os.path.splitext(os.path.basename(bpy.data.filepath))[0]
+    return os.path.join(directory, base_name + extension)
 
 
 class SaveFileMixin:
@@ -1166,7 +1184,7 @@ class UVTT_OT_export_fbx(SaveFileMixin, bpy.types.Operator):
         if not self._ensure_saved(context):
             return {"CANCELLED"}
 
-        filepath = _export_filepath(".fbx")
+        filepath = _export_filepath(".fbx", _export_name(context))
 
         bpy.ops.export_scene.fbx(
             filepath=filepath,
@@ -1215,7 +1233,7 @@ class UVTT_OT_export_obj(SaveFileMixin, bpy.types.Operator):
         if not self._ensure_saved(context):
             return {"CANCELLED"}
 
-        filepath = _export_filepath(".obj")
+        filepath = _export_filepath(".obj", _export_name(context))
 
         bpy.ops.wm.obj_export(
             filepath=filepath,
@@ -1441,6 +1459,7 @@ class UVTT_PT_tools(bpy.types.Panel):
         layout = self.layout
         box = layout.box()
         box.label(text="Export")
+        box.prop(context.scene, "uvtt_export_use_mesh_name")
         row = box.row(align=True)
         row.operator("uvtt.export_fbx", text="Export FBX", icon="EXPORT")
         row.operator("uvtt.export_obj", text="Export OBJ", icon="EXPORT")
@@ -1527,6 +1546,11 @@ def register():
         bpy.utils.register_class(cls)
 
     bpy.types.Scene.uvtt_check_results = bpy.props.CollectionProperty(type=UVTT_CheckResult)
+    bpy.types.Scene.uvtt_export_use_mesh_name = bpy.props.BoolProperty(
+        name="Use mesh name as file name",
+        description="Name the exported file after the selected mesh instead of the .blend file",
+        default=False,
+    )
     bpy.types.Scene.uvtt_intersection_depth = bpy.props.IntProperty(
         name="Depth (mm)",
         description="Thickness of the red tube drawn along open (boundary) edges",
@@ -1540,6 +1564,7 @@ def unregister():
     _remove_dimension_handlers()
 
     del bpy.types.Scene.uvtt_intersection_depth
+    del bpy.types.Scene.uvtt_export_use_mesh_name
     del bpy.types.Scene.uvtt_check_results
 
     for cls in reversed(classes):
