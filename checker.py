@@ -1478,6 +1478,7 @@ class UVTT_OT_auto_lod(SafetyConfirmMixin, bpy.types.Operator):
 
         total_created = 0
         stopped_early = 0
+        per_object_summaries = []
 
         for obj in objects:
             base_name = obj.name
@@ -1494,7 +1495,7 @@ class UVTT_OT_auto_lod(SafetyConfirmMixin, bpy.types.Operator):
 
             previous = obj
             previous_faces = len(previous.data.polygons)
-            created_for_object = 0
+            lod_summary = ["%s (%d polys)" % (obj.name, previous_faces)]
 
             for level in range(1, LOD_LEVELS + 1):
                 target_faces = max(1, round(previous_faces * ratio))
@@ -1522,8 +1523,13 @@ class UVTT_OT_auto_lod(SafetyConfirmMixin, bpy.types.Operator):
 
                 previous = new_obj
                 previous_faces = len(new_obj.data.polygons)
-                created_for_object += 1
+                lod_summary.append("%s (%d polys)" % (new_obj.name, previous_faces))
                 total_created += 1
+
+            if len(lod_summary) > 1:
+                per_object_summaries.append(
+                    "%s: %s" % (base_name, ", ".join(lod_summary))
+                )
 
         if total_created == 0:
             self.report({"WARNING"}, "No LODs created - nothing to reduce")
@@ -1533,6 +1539,11 @@ class UVTT_OT_auto_lod(SafetyConfirmMixin, bpy.types.Operator):
         if stopped_early:
             message += " - stopped early on %d object(s) to avoid over-simplifying" % stopped_early
         self.report({"INFO"}, message)
+
+        tip = "Generated LODs. " + " | ".join(per_object_summaries)
+        if stopped_early:
+            tip += " Stopped early on %d object(s) to avoid over-simplifying." % stopped_early
+        context.scene["uvtt_checker_tip"] = tip
         return {"FINISHED"}
 
 
