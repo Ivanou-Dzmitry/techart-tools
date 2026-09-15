@@ -1447,6 +1447,95 @@ class UVTT_OT_render_preview(SaveFileMixin, bpy.types.Operator):
         return {"FINISHED"}
 
 
+LOD_LEVELS = 3
+LOD_MIN_FACES = 12
+
+
+class UVTT_OT_auto_lod(SafetyConfirmMixin, bpy.types.Operator):
+    """Build an LOD chain for the selected mesh(es).
+
+    Creates a "<name>_LODS" collection, moves the original into it as LOD0
+    (renamed, unchanged otherwise), then adds progressively decimated copies
+    LOD1-LOD3, each roughly "Reduction" smaller than the one before. Stops
+    early - producing fewer levels - if another step would drop below a
+    safe triangle count, instead of collapsing a LOD down to almost nothing.
+    Every generated LOD is a plain mesh with no live modifiers.
+    """
+
+    bl_idname = "uvtt.auto_lod"
+    bl_label = "Generate LODs"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == "OBJECT" and bool(_checker_objects(context))
+
+    def execute(self, context):
+        self._save_if_dirty(context)
+
+        ratio = context.scene.uvtt_lod_ratio
+        objects = _checker_objects(context)
+
+        total_created = 0
+        stopped_early = 0
+
+        for obj in objects:
+            base_name = obj.name
+            base_data_name = obj.data.name
+
+            lods_collection = bpy.data.collections.new(base_name + "_LODS")
+            context.collection.children.link(lods_collection)
+
+            for coll in list(obj.users_collection):
+                coll.objects.unlink(obj)
+            lods_collection.objects.link(obj)
+            obj.name = base_name + "_LOD0"
+            obj.data.name = base_data_name + "_LOD0"
+
+            previous = obj
+            previous_faces = len(previous.data.polygons)
+            created_for_object = 0
+
+            for level in range(1, LOD_LEVELS + 1):
+                target_faces = max(1, round(previous_faces * ratio))
+                if target_faces < LOD_MIN_FACES:
+                    stopped_early += 1
+                    break
+
+                new_obj = previous.copy()
+                new_obj.data = previous.data.copy()
+                new_obj.name = "%s_LOD%d" % (base_name, level)
+                new_obj.data.name = "%s_LOD%d" % (base_data_name, level)
+                lods_collection.objects.link(new_obj)
+
+                mod = new_obj.modifiers.new("Decimate", "DECIMATE")
+                mod.ratio = ratio
+                mod.decimate_type = "COLLAPSE"
+
+                with context.temp_override(
+                    active_object=new_obj,
+                    selected_editable_objects=[new_obj],
+                    selected_objects=[new_obj],
+                    object=new_obj,
+                ):
+                    bpy.ops.object.convert(target="MESH")
+
+                previous = new_obj
+                previous_faces = len(new_obj.data.polygons)
+                created_for_object += 1
+                total_created += 1
+
+        if total_created == 0:
+            self.report({"WARNING"}, "No LODs created - nothing to reduce")
+            return {"CANCELLED"}
+
+        message = "Created %d LOD level(s) across %d object(s)" % (total_created, len(objects))
+        if stopped_early:
+            message += " - stopped early on %d object(s) to avoid over-simplifying" % stopped_early
+        self.report({"INFO"}, message)
+        return {"FINISHED"}
+
+
 class UVTT_PT_tools(bpy.types.Panel):
     bl_label = "Tools"
     bl_idname = "UVTT_PT_tools"
@@ -1478,6 +1567,15 @@ class UVTT_PT_tools(bpy.types.Panel):
         box.operator("uvtt.render_preview", text="Render Preview", icon="RENDER_STILL")
         if not bpy.data.filepath:
             box.label(text="Save the .blend file first", icon="ERROR")
+
+        box = layout.box()
+        box.label(text="Auto LOD")
+        box.prop(context.scene, "uvtt_lod_ratio", text="Reduction per LOD")
+        box.label(
+            text="Each next LOD will be about %d%% of the previous."
+            % round(context.scene.uvtt_lod_ratio * 100)
+        )
+        box.operator("uvtt.auto_lod", text="Generate LODs", icon="MOD_DECIM")
 
 
 class UVTT_PT_checker_tips(bpy.types.Panel):
@@ -1531,6 +1629,7 @@ classes = (
     UVTT_OT_check_intersection,
     UVTT_OT_clean_intersection,
     UVTT_OT_render_preview,
+    UVTT_OT_auto_lod,
     UVTT_PT_viewport_guide,
     UVTT_PT_prepare,
     UVTT_PT_statistics,
@@ -1558,11 +1657,21 @@ def register():
         min=1,
         max=99,
     )
+    bpy.types.Scene.uvtt_lod_ratio = bpy.props.FloatProperty(
+        name="Reduction per LOD",
+        description="Target face ratio for each LOD relative to the previous one",
+        default=0.5,
+        min=0.05,
+        max=0.95,
+        precision=2,
+        subtype="FACTOR",
+    )
 
 
 def unregister():
     _remove_dimension_handlers()
 
+    del bpy.types.Scene.uvtt_lod_ratio
     del bpy.types.Scene.uvtt_intersection_depth
     del bpy.types.Scene.uvtt_export_use_mesh_name
     del bpy.types.Scene.uvtt_check_results
