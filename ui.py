@@ -71,10 +71,10 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
         box = layout.box()
         box.label(text="Move UV", icon="CON_LOCLIKE")
         grid = box.grid_flow(columns=2, align=True)
-        grid.operator("uvtt.move", text="-1U").offset_u = -1.0
-        grid.operator("uvtt.move", text="+1U").offset_u = 1.0
-        grid.operator("uvtt.move", text="-1V").offset_v = -1.0
-        grid.operator("uvtt.move", text="+1V").offset_v = 1.0
+        grid.operator("uvtt.move", text="-1U", icon="TRIA_LEFT").offset_u = -1.0
+        grid.operator("uvtt.move", text="+1U", icon="TRIA_RIGHT").offset_u = 1.0
+        grid.operator("uvtt.move", text="-1V", icon="TRIA_DOWN").offset_v = -1.0
+        grid.operator("uvtt.move", text="+1V", icon="TRIA_UP").offset_v = 1.0
 
         box = layout.box()
         box.label(text="Align", icon="OBJECT_ORIGIN")
