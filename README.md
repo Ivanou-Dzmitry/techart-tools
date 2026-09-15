@@ -27,7 +27,7 @@ Source code: [github.com/Ivanou-Dzmitry/techart-tools](https://github.com/Ivanou
 
 ### Rotate
 
-Rotates the selected UVs around their median point by a fixed angle: **-90 / -45 / +45 / +90** degrees. Positive values rotate counter-clockwise. Useful for straightening seams or fixing a wrong texture orientation before packing.
+Rotates the selected UVs around their median point by a fixed angle: **CW 90° / CW 45° / CCW 45° / CCW 90°**. Useful for straightening seams or fixing a wrong texture orientation before packing.
 
 ### Scale
 

@@ -55,10 +55,10 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
         box = layout.box()
         box.label(text="Rotate", icon="CON_ROTLIKE")
         grid = box.grid_flow(columns=2, align=True)
-        grid.operator("uvtt.rotate", text="-90").angle = -90.0
-        grid.operator("uvtt.rotate", text="-45").angle = -45.0
-        grid.operator("uvtt.rotate", text="+45").angle = 45.0
-        grid.operator("uvtt.rotate", text="+90").angle = 90.0
+        grid.operator("uvtt.rotate", text="CW 90°").angle = -90.0
+        grid.operator("uvtt.rotate", text="CW 45°").angle = -45.0
+        grid.operator("uvtt.rotate", text="CCW 45°").angle = 45.0
+        grid.operator("uvtt.rotate", text="CCW 90°").angle = 90.0
 
         box = layout.box()
         box.label(text="Scale", icon="CON_SIZELIKE")
