@@ -1547,6 +1547,160 @@ class UVTT_OT_auto_lod(SafetyConfirmMixin, bpy.types.Operator):
         return {"FINISHED"}
 
 
+def _bake_ao_material(image):
+    """Get-or-create a plain white material with an Image Texture node
+    plugged into Base Color, wired the same way Blender's own "simple bake
+    target" setup looks - and mark that node active/selected, since that is
+    how Cycles decides which image a bake writes into.
+    """
+
+    mat_name = "UVTT_BakeAO_" + image.name
+    mat = bpy.data.materials.get(mat_name)
+    if mat is None:
+        mat = bpy.data.materials.new(mat_name)
+        mat.use_nodes = True
+
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+
+    bsdf = nodes.get("Principled BSDF")
+    if bsdf is not None:
+        bsdf.inputs["Base Color"].default_value = (1.0, 1.0, 1.0, 1.0)
+        bsdf.inputs["Roughness"].default_value = 0.5
+        if "Metallic" in bsdf.inputs:
+            bsdf.inputs["Metallic"].default_value = 0.0
+
+    tex_node = nodes.get("UVTT_BakeImage")
+    if tex_node is None:
+        tex_node = nodes.new("ShaderNodeTexImage")
+        tex_node.name = "UVTT_BakeImage"
+    tex_node.image = image
+
+    if bsdf is not None:
+        operators._ensure_link(links, tex_node.outputs["Color"], bsdf.inputs["Base Color"])
+
+    for node in nodes:
+        node.select = False
+    tex_node.select = True
+    nodes.active = tex_node
+
+    mat["uvtt_generated"] = True
+    return mat
+
+
+class UVTT_OT_bake_ao(SaveFileMixin, bpy.types.Operator):
+    """Bake self-only Ambient Occlusion for the selected mesh(es) to a PNG.
+
+    Builds a simple white material with an Image Texture node for each
+    object and bakes into it with Cycles. Every other object in the scene is
+    temporarily hidden from render while an object bakes, so the result is
+    the object shading itself - not other objects casting shadows onto it.
+    The image is saved as "<mesh name>_AO.png" next to the .blend file.
+    """
+
+    bl_idname = "uvtt.bake_ao"
+    bl_label = "Bake AO"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == "OBJECT" and bool(_checker_objects(context))
+
+    def execute(self, context):
+        if not self._ensure_saved(context):
+            return {"CANCELLED"}
+
+        all_objects = _checker_objects(context)
+        objects = [obj for obj in all_objects if obj.data.uv_layers]
+        skipped_no_uv = len(all_objects) - len(objects)
+        if not objects:
+            self.report({"WARNING"}, "Selected object(s) have no UV map to bake into")
+            return {"CANCELLED"}
+
+        size = int(context.scene.uvtt_bake_ao_size)
+        samples = context.scene.uvtt_bake_ao_samples
+        margin = context.scene.uvtt_bake_ao_margin
+        denoise = context.scene.uvtt_bake_ao_denoise
+        directory = os.path.dirname(bpy.data.filepath)
+
+        scene = context.scene
+        prev_engine = scene.render.engine
+        prev_samples = scene.cycles.samples
+        prev_denoise = scene.cycles.use_denoising
+        prev_selected = list(context.selected_objects)
+        prev_active = context.view_layer.objects.active
+
+        scene.render.engine = "CYCLES"
+        scene.cycles.samples = samples
+        scene.cycles.use_denoising = denoise
+
+        baked = []
+
+        try:
+            for obj in objects:
+                image_name = _safe_filename(obj.name) + "_AO"
+                image = bpy.data.images.get(image_name)
+                if image is not None and tuple(image.size) != (size, size):
+                    bpy.data.images.remove(image)
+                    image = None
+                if image is None:
+                    image = bpy.data.images.new(image_name, width=size, height=size)
+                image.colorspace_settings.name = "Non-Color"
+
+                mat = _bake_ao_material(image)
+                operators._remember_original_material(obj)
+                if obj.data.materials:
+                    obj.data.materials[0] = mat
+                else:
+                    obj.data.materials.append(mat)
+
+                hidden = []
+                for other in scene.objects:
+                    if other is not obj and not other.hide_render:
+                        other.hide_render = True
+                        hidden.append(other)
+
+                for o in context.view_layer.objects:
+                    o.select_set(o is obj)
+                context.view_layer.objects.active = obj
+
+                try:
+                    bpy.ops.object.bake(
+                        type="AO",
+                        margin=margin,
+                        margin_type="ADJACENT_FACES",
+                        use_clear=True,
+                    )
+                finally:
+                    for other in hidden:
+                        other.hide_render = False
+
+                filepath = os.path.join(directory, image_name + ".png")
+                image.filepath_raw = filepath
+                image.file_format = "PNG"
+                image.save()
+
+                baked.append("%s -> %s (%dx%d)" % (obj.name, os.path.basename(filepath), size, size))
+        finally:
+            scene.render.engine = prev_engine
+            scene.cycles.samples = prev_samples
+            scene.cycles.use_denoising = prev_denoise
+            for o in context.view_layer.objects:
+                o.select_set(o in prev_selected)
+            context.view_layer.objects.active = prev_active
+
+        if not baked:
+            self.report({"WARNING"}, "Nothing baked")
+            return {"CANCELLED"}
+
+        message = "Baked AO for %d object(s)" % len(baked)
+        if skipped_no_uv:
+            message += " - skipped %d object(s) with no UV map" % skipped_no_uv
+        self.report({"INFO"}, message)
+        context.scene["uvtt_checker_tip"] = "Baked AO. " + " | ".join(baked)
+        return {"FINISHED"}
+
+
 class UVTT_PT_tools(bpy.types.Panel):
     bl_label = "Tools"
     bl_idname = "UVTT_PT_tools"
@@ -1587,6 +1741,16 @@ class UVTT_PT_tools(bpy.types.Panel):
             % round(context.scene.uvtt_lod_ratio * 100)
         )
         box.operator("uvtt.auto_lod", text="Generate LODs", icon="MOD_DECIM")
+
+        box = layout.box()
+        box.label(text="Bake AO")
+        box.prop(context.scene, "uvtt_bake_ao_size", text="Map Size (px)")
+        box.prop(context.scene, "uvtt_bake_ao_samples", text="Samples")
+        box.prop(context.scene, "uvtt_bake_ao_margin", text="Margin (px)")
+        box.prop(context.scene, "uvtt_bake_ao_denoise")
+        box.operator("uvtt.bake_ao", text="Bake AO", icon="IMAGE_DATA")
+        if not bpy.data.filepath:
+            box.label(text="Save the .blend file first", icon="ERROR")
 
 
 class UVTT_PT_checker_tips(bpy.types.Panel):
@@ -1641,6 +1805,7 @@ classes = (
     UVTT_OT_clean_intersection,
     UVTT_OT_render_preview,
     UVTT_OT_auto_lod,
+    UVTT_OT_bake_ao,
     UVTT_PT_viewport_guide,
     UVTT_PT_prepare,
     UVTT_PT_statistics,
@@ -1677,11 +1842,40 @@ def register():
         precision=2,
         subtype="FACTOR",
     )
+    bpy.types.Scene.uvtt_bake_ao_size = bpy.props.EnumProperty(
+        name="Map Size",
+        description="Resolution of the baked AO texture",
+        items=operators.MAP_SIZES,
+        default="1024",
+    )
+    bpy.types.Scene.uvtt_bake_ao_samples = bpy.props.IntProperty(
+        name="Samples",
+        description="Cycles samples used for the AO bake - higher is cleaner but slower",
+        default=256,
+        min=8,
+        max=4096,
+    )
+    bpy.types.Scene.uvtt_bake_ao_margin = bpy.props.IntProperty(
+        name="Margin (px)",
+        description="Pixels of dilation past each UV island's edge, to avoid black seams",
+        default=16,
+        min=0,
+        max=64,
+    )
+    bpy.types.Scene.uvtt_bake_ao_denoise = bpy.props.BoolProperty(
+        name="Denoise",
+        description="Denoise the bake result",
+        default=True,
+    )
 
 
 def unregister():
     _remove_dimension_handlers()
 
+    del bpy.types.Scene.uvtt_bake_ao_denoise
+    del bpy.types.Scene.uvtt_bake_ao_margin
+    del bpy.types.Scene.uvtt_bake_ao_samples
+    del bpy.types.Scene.uvtt_bake_ao_size
     del bpy.types.Scene.uvtt_lod_ratio
     del bpy.types.Scene.uvtt_intersection_depth
     del bpy.types.Scene.uvtt_export_use_mesh_name
