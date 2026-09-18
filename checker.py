@@ -1685,12 +1685,10 @@ class UVTT_OT_bake_ao(SaveFileMixin, bpy.types.Operator):
         try:
             for obj in objects:
                 image_name = _safe_filename(obj.name) + "_ao"
-                image = bpy.data.images.get(image_name)
-                if image is not None and tuple(image.size) != (size, size):
-                    bpy.data.images.remove(image)
-                    image = None
-                if image is None:
-                    image = bpy.data.images.new(image_name, width=size, height=size)
+                existing_image = bpy.data.images.get(image_name)
+                if existing_image is not None:
+                    bpy.data.images.remove(existing_image)
+                image = bpy.data.images.new(image_name, width=size, height=size)
                 image.colorspace_settings.name = "Non-Color"
 
                 mat = _bake_ao_material(image)
@@ -1748,12 +1746,19 @@ class UVTT_OT_bake_ao(SaveFileMixin, bpy.types.Operator):
 
 
 def _get_or_new_image(name, size, alpha=False):
-    image = bpy.data.images.get(name)
-    if image is not None and tuple(image.size) != (size, size):
-        bpy.data.images.remove(image)
-        image = None
-    if image is None:
-        image = bpy.data.images.new(name, width=size, height=size, alpha=alpha)
+    """Always create a fresh generated image under this name.
+
+    Re-running the generator on an image saved by a previous run would
+    otherwise reuse that datablock - but save() turns a generated image into
+    a file-backed one, and its pixel buffer isn't guaranteed to still be
+    loaded, so writing into it can fail with "does not have any image
+    data". Recreating it from scratch avoids that entirely.
+    """
+
+    existing = bpy.data.images.get(name)
+    if existing is not None:
+        bpy.data.images.remove(existing)
+    image = bpy.data.images.new(name, width=size, height=size, alpha=alpha)
     if alpha:
         image.alpha_mode = "STRAIGHT"
     return image
@@ -1767,6 +1772,8 @@ def _fill_image(image, color):
 
 
 def _grayscale_channel_from_image(image, size):
+    if not image.has_data:
+        image.reload()
     src = image
     temp = None
     if tuple(src.size) != (size, size):
@@ -1804,6 +1811,8 @@ def _repacked_copy(source_image, name, size):
     """Duplicate an existing image (never touching the original) under a new
     name, resized to match the requested output size."""
 
+    if not source_image.has_data:
+        source_image.reload()
     existing = bpy.data.images.get(name)
     if existing is not None:
         bpy.data.images.remove(existing)
