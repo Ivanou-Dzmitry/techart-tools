@@ -13,7 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
-TECHART_VERSION = "0.30.0"
+TECHART_VERSION = "0.31.0"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -584,36 +584,46 @@ class UVTT_OT_set_checker(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def _safe_filename(name):
+    invalid = '<>:"/\\|?*'
+    cleaned = "".join("_" if c in invalid else c for c in name).strip()
+    return cleaned or "export"
+
+
 class UVTT_OT_render_uv(bpy.types.Operator):
-    """Render the object's UV layout to an image and apply it as a diffuse texture"""
+    """Export the object's UV layout as a PNG next to the .blend file, and
+    apply it to the object as a diffuse texture."""
 
     bl_idname = "uvtt.render_uv"
     bl_label = "Render UV"
     bl_options = {"REGISTER", "UNDO"}
-
-    size: bpy.props.IntProperty(
-        name="Size",
-        description="Resolution of the rendered UV layout image",
-        default=512,
-        min=64,
-        max=4096,
-    )
 
     @classmethod
     def poll(cls, context):
         return context.edit_object is not None and context.edit_object.type == "MESH"
 
     def execute(self, context):
+        if not bpy.data.filepath:
+            self.report(
+                {"WARNING"}, "Save the .blend file first - the output path is derived from it"
+            )
+            return {"CANCELLED"}
+        if bpy.data.is_dirty:
+            bpy.ops.wm.save_mainfile()
+
         obj = context.edit_object
-        filepath = os.path.join(bpy.app.tempdir, "uvtt_render_uv.png")
+        size = int(context.scene.uvtt_render_uv_size)
+        opacity = context.scene.uvtt_render_uv_opacity
+        directory = os.path.dirname(bpy.data.filepath)
+        filepath = os.path.join(directory, _safe_filename(obj.name) + "_uv.png")
 
         result = bpy.ops.uv.export_layout(
             filepath=filepath,
             check_existing=False,
             export_all=True,
             mode="PNG",
-            size=(self.size, self.size),
-            opacity=0.25,
+            size=(size, size),
+            opacity=opacity,
         )
         if "FINISHED" not in result:
             self.report({"ERROR"}, "Could not export UV layout")
@@ -635,8 +645,9 @@ class UVTT_OT_render_uv(bpy.types.Operator):
         _clear_uv_utilization(context)
         _set_tip(
             context,
-            "Rendered the current UV layout onto the object as a texture, so you "
-            "can spot missing or broken UVs without opening the UV Editor.",
+            "Exported the current UV layout to %s and applied it onto the object as "
+            "a texture, so you can spot missing or broken UVs without opening the "
+            "UV Editor." % filepath,
         )
 
         return {"FINISHED"}
@@ -1527,6 +1538,20 @@ def register():
         min=1,
         max=9,
     )
+    bpy.types.Scene.uvtt_render_uv_size = bpy.props.EnumProperty(
+        name="Map Size",
+        description="Resolution of the exported UV layout image",
+        items=MAP_SIZES,
+        default="1024",
+    )
+    bpy.types.Scene.uvtt_render_uv_opacity = bpy.props.FloatProperty(
+        name="Fill Opacity",
+        description="Opacity of the translucent face fill in the exported UV layout image",
+        default=0.25,
+        min=0.0,
+        max=1.0,
+        subtype="FACTOR",
+    )
 
     bpy.types.Object.uvtt_original_material = bpy.props.PointerProperty(type=bpy.types.Material)
     bpy.types.Object.uvtt_material_saved = bpy.props.BoolProperty(default=False)
@@ -1536,6 +1561,8 @@ def unregister():
     del bpy.types.Object.uvtt_material_saved
     del bpy.types.Object.uvtt_original_material
 
+    del bpy.types.Scene.uvtt_render_uv_opacity
+    del bpy.types.Scene.uvtt_render_uv_size
     del bpy.types.Scene.uvtt_tiny_uv_px
     del bpy.types.Scene.uvtt_tiny_poly_area
     del bpy.types.Scene.uvtt_texel_range

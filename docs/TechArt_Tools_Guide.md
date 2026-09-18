@@ -5,7 +5,7 @@
 The tool lives in two places, each opening with an **Online Guide** button linking back to this page:
 
 * **UV Editor sidebar (N-panel → TechArt Tools tab)** — three collapsible sections: **UV Manipulation** (transforms), **Checkers** (checker textures, Render UV) and **Texel** (UV utilization, texel density).
-* **3D Viewport sidebar (N-panel → TechArt Tools tab)** — six collapsible sections: **Preparation** (batch mesh/scene cleanup), **Statistics** (mesh/UV stats and a bounding-box dimension overlay), **Material** (Gloss/Matte/NM check materials), **Checker** (13-point QA checklist), **Tools** (FBX/OBJ export, intersection check, viewport preview render) and **Tips**.
+* **3D Viewport sidebar (N-panel → TechArt Tools tab)** — six collapsible sections: **Preparation** (batch mesh/scene cleanup), **Statistics** (mesh/UV stats and a bounding-box dimension overlay), **Material** (Gloss/Matte/NM check materials, AO baking, base texture set generation), **Checker** (13-point QA checklist), **Tools** (FBX/OBJ export, intersection check, viewport preview render, Auto LOD) and **Tips**.
 
 All sections are collapsed by default so the sidebar stays short — expand only what you need. A **Tips** section appears after most actions with a short, contextual explanation of what just happened and why it matters.
 
@@ -65,7 +65,7 @@ Retiles the active checker to simulate a texture resolution: **128 / 256 / 512 /
 
 ### Render UV
 
-Renders the current UV layout (edges over a translucent fill) to an image and applies it to the object as a texture, so you can see the UV layout directly on the model without opening the UV Editor — useful for spotting missing or broken UVs at a glance.
+Exports the current UV layout (edges over a translucent fill, **Map Size** and **Fill Opacity** configurable) as `<mesh name>_uv.png` next to the `.blend` file, and applies it to the object as a texture — so you can see the UV layout directly on the model without opening the UV Editor, useful for spotting missing or broken UVs at a glance.
 
 A **Remove Checker** button below the checker picker clears it — it restores whatever material was on the object before (see **Material**, in the 3D Viewport panel, for how that works).
 
@@ -157,12 +157,18 @@ Six collapsible sections, all under the **TechArt Tools** tab in the 3D Viewport
 
 ### Material
 
-Assigns the same check materials as the UV Editor's Checkers panel, but from the 3D Viewport:
+Three groups, from the 3D Viewport:
+
+**Common** — the same check materials as the UV Editor's Checkers panel:
 
 * **Gloss** — assigns a glossy material (low roughness). Sharp specular highlights make it easier to spot faceting and other surface artifacts.
 * **Matte** — assigns a matte material (high roughness). Neutral and easy on the eyes — good for a general shape and silhouette review.
 * **NM** — assigns a test normal map with readable "UP" / "DOWN" text baked into it, revealing a flipped Y channel or mirrored UVs at a glance.
-* **Reset** — restores whatever material was on the object *before* any check material (checker, Gloss, Matte, NM, Render UV, Check Texel Density) was applied, instead of just clearing the slot. TechArt Tools remembers the original the first time one of those is assigned.
+* **Reset** — restores whatever material was on the object *before* any check material (checker, Gloss, Matte, NM, Render UV, Check Texel Density, Bake AO) was applied, instead of just clearing the slot. TechArt Tools remembers the original the first time one of those is assigned.
+
+**Bake AO** — bakes self-only Ambient Occlusion for the selected mesh(es) and saves it as `<mesh name>_ao.png` next to the `.blend` file. Builds a plain white material with an Image Texture node for each object and bakes into it with Cycles; every other object in the scene is temporarily hidden from render while an object bakes, so the result reflects only that object's own shape — not shadows cast by neighbouring objects. Options: **Map Size** (default 1024), **Samples** (default 256), **Margin** (px of dilation past each UV island's edge, to avoid black seams — default 16), **Denoise** (on by default). Requires the object to already have a UV map. The bake material is assigned to slot 0.
+
+**Base Texture Set** — generates a flat-fill starting texture set for the selected mesh(es), next to the `.blend` file: `<mesh name>_am.png` (RGB albedo), `<mesh name>_maor.png` (RGBA — Metal in R, AO in G, Roughness in Alpha, Blue unused) and `<mesh name>_nm.png` (flat tangent-space normal). Pick a **Map Size** and a flat value for **Albedo**, **Metal**, **AO** and **Roughness** — if a `<mesh name>_ao` image already exists (for example from **Bake AO**), it is used for the AO channel instead of the flat value. A quick, correctly named and correctly packed base to paint over.
 
 ### Checker (QA Checklist)
 
@@ -192,7 +198,6 @@ A short summary ("N / 13 checks passed") is shown at the top of the results. **O
 * **Check Intersection** — finds open (boundary) edges on the selected object(s) and traces them with a bright red tube (**Depth (mm)**, default 10). Where two parts are meant to overlap — a bolt into a block, for example — a visible red tube means the intersection there is too shallow. **Clean** removes the helper geometry.
 * **Render Preview** — frames the selected object(s) (or the whole scene, if nothing is selected) in the current Perspective viewport and saves a snapshot as `<filename>_preview.jpg` next to the `.blend` file.
 * **Auto LOD** — builds an LOD chain for the selected mesh(es). Creates a `<name>_LODS` collection, moves the original into it renamed to `<name>_LOD0`, then adds progressively decimated copies `_LOD1`–`_LOD3`, each roughly **Reduction per LOD** (default 50%) smaller than the one before — every generated LOD is a plain mesh with no live modifiers. Stops early (producing fewer levels) rather than reducing a LOD down to almost nothing, if another step would drop below a safe triangle count.
-* **Bake AO** — bakes self-only Ambient Occlusion for the selected mesh(es) and saves it as `<mesh name>_AO.png` next to the `.blend` file. Builds a plain white material with an Image Texture node for each object and bakes into it with Cycles; every other object in the scene is temporarily hidden from render while an object bakes, so the result reflects only that object's own shape — not shadows cast by neighbouring objects. Options: **Map Size** (default 1024), **Samples** (default 256), **Margin** (px of dilation past each UV island's edge, to avoid black seams — default 16), **Denoise** (on by default). Requires the object to already have a UV map. The bake material is assigned to slot 0 — use **Reset** in the Material panel to restore whatever material was there before.
 
 ### Tips
 

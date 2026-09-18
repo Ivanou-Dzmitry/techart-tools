@@ -115,7 +115,11 @@ class UVTT_PT_checkers(bpy.types.Panel):
 
         box = layout.box()
         box.label(text="Render UV")
+        box.prop(context.scene, "uvtt_render_uv_size", text="Map Size (px)")
+        box.prop(context.scene, "uvtt_render_uv_opacity")
         box.operator("uvtt.render_uv", text="Render", icon="RENDER_STILL")
+        if not bpy.data.filepath:
+            box.label(text="Save the .blend file first", icon="ERROR")
 
 
 class UVTT_PT_texel(bpy.types.Panel):

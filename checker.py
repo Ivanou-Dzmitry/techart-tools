@@ -5,6 +5,7 @@ import blf
 import bmesh
 import bpy
 import gpu
+import numpy as np
 from bpy_extras import view3d_utils
 from gpu_extras.batch import batch_for_shader
 from mathutils import Vector
@@ -1064,11 +1065,36 @@ class UVTT_PT_material(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        row = layout.row(align=True)
+
+        box = layout.box()
+        box.label(text="Common")
+        row = box.row(align=True)
         row.operator("uvtt.set_gloss", text="Gloss", icon="SHADING_RENDERED")
         row.operator("uvtt.set_matte", text="Matte", icon="SHADING_SOLID")
         row.operator("uvtt.set_normal_check", text="NM", icon="NORMALS_FACE")
-        layout.operator("uvtt.reset_material", text="Reset", icon="LOOP_BACK")
+        box.operator("uvtt.reset_material", text="Reset", icon="LOOP_BACK")
+
+        box = layout.box()
+        box.label(text="Bake AO")
+        box.prop(context.scene, "uvtt_bake_ao_size", text="Map Size (px)")
+        box.prop(context.scene, "uvtt_bake_ao_samples", text="Samples")
+        box.prop(context.scene, "uvtt_bake_ao_margin", text="Margin (px)")
+        box.prop(context.scene, "uvtt_bake_ao_denoise")
+        box.operator("uvtt.bake_ao", text="Bake AO", icon="IMAGE_DATA")
+        if not bpy.data.filepath:
+            box.label(text="Save the .blend file first", icon="ERROR")
+
+        box = layout.box()
+        box.label(text="Base Texture Set")
+        box.prop(context.scene, "uvtt_basetex_size", text="Map Size (px)")
+        box.prop(context.scene, "uvtt_basetex_albedo_color", text="Albedo")
+        box.prop(context.scene, "uvtt_basetex_metal", text="Metal")
+        box.prop(context.scene, "uvtt_basetex_ao", text="AO")
+        box.prop(context.scene, "uvtt_basetex_roughness", text="Roughness")
+        box.label(text='Normal: flat, saved as "_nm"')
+        box.operator("uvtt.generate_base_tex", text="Generate Base Tex", icon="TEXTURE")
+        if not bpy.data.filepath:
+            box.label(text="Save the .blend file first", icon="ERROR")
 
 
 class UVTT_PT_checker(bpy.types.Panel):
@@ -1595,7 +1621,7 @@ class UVTT_OT_bake_ao(SaveFileMixin, bpy.types.Operator):
     object and bakes into it with Cycles. Every other object in the scene is
     temporarily hidden from render while an object bakes, so the result is
     the object shading itself - not other objects casting shadows onto it.
-    The image is saved as "<mesh name>_AO.png" next to the .blend file.
+    The image is saved as "<mesh name>_ao.png" next to the .blend file.
     """
 
     bl_idname = "uvtt.bake_ao"
@@ -1638,7 +1664,7 @@ class UVTT_OT_bake_ao(SaveFileMixin, bpy.types.Operator):
 
         try:
             for obj in objects:
-                image_name = _safe_filename(obj.name) + "_AO"
+                image_name = _safe_filename(obj.name) + "_ao"
                 image = bpy.data.images.get(image_name)
                 if image is not None and tuple(image.size) != (size, size):
                     bpy.data.images.remove(image)
@@ -1701,6 +1727,128 @@ class UVTT_OT_bake_ao(SaveFileMixin, bpy.types.Operator):
         return {"FINISHED"}
 
 
+def _get_or_new_image(name, size, alpha=False):
+    image = bpy.data.images.get(name)
+    if image is not None and tuple(image.size) != (size, size):
+        bpy.data.images.remove(image)
+        image = None
+    if image is None:
+        image = bpy.data.images.new(name, width=size, height=size, alpha=alpha)
+    if alpha:
+        image.alpha_mode = "STRAIGHT"
+    return image
+
+
+def _fill_image(image, color):
+    count = image.size[0] * image.size[1]
+    pixels = np.tile(np.array(color, dtype=np.float32), count)
+    image.pixels.foreach_set(pixels)
+    image.update()
+
+
+def _grayscale_channel_from_image(image, size):
+    src = image
+    temp = None
+    if tuple(src.size) != (size, size):
+        temp = src.copy()
+        temp.scale(size, size)
+        src = temp
+    count = src.size[0] * src.size[1]
+    flat = np.empty(count * src.channels, dtype=np.float32)
+    src.pixels.foreach_get(flat)
+    gray = flat.reshape((count, src.channels))[:, 0].copy()
+    if temp is not None:
+        bpy.data.images.remove(temp)
+    return gray
+
+
+def _find_ao_image(base_name, directory):
+    image = bpy.data.images.get(base_name + "_ao")
+    if image is not None:
+        return image
+    filepath = os.path.join(directory, base_name + "_ao.png")
+    if os.path.isfile(filepath):
+        return bpy.data.images.load(filepath, check_existing=True)
+    return None
+
+
+def _save_png(image, directory):
+    filepath = os.path.join(directory, image.name + ".png")
+    image.filepath_raw = filepath
+    image.file_format = "PNG"
+    image.save()
+    return filepath
+
+
+class UVTT_OT_generate_base_tex(SaveFileMixin, bpy.types.Operator):
+    """Generate a flat-fill base texture set for the selected mesh(es).
+
+    A quick, correctly-named and correctly-packed starting point to paint
+    over: "<mesh>_am.png" (RGB albedo), "<mesh>_maor.png" (RGBA - Metal in
+    R, AO in G, Roughness in Alpha) and "<mesh>_nm.png" (flat tangent-space
+    normal). If a "<mesh>_ao" image already exists (e.g. from Bake AO), it
+    is used for the AO channel instead of the flat AO value.
+    """
+
+    bl_idname = "uvtt.generate_base_tex"
+    bl_label = "Generate Base Tex"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return bool(_checker_objects(context))
+
+    def execute(self, context):
+        if not self._ensure_saved(context):
+            return {"CANCELLED"}
+
+        scene = context.scene
+        size = int(scene.uvtt_basetex_size)
+        directory = os.path.dirname(bpy.data.filepath)
+        albedo = tuple(scene.uvtt_basetex_albedo_color)
+        metal_value = scene.uvtt_basetex_metal
+        ao_value = scene.uvtt_basetex_ao
+        roughness_value = scene.uvtt_basetex_roughness
+
+        created = []
+        for obj in _checker_objects(context):
+            base_name = _safe_filename(obj.name)
+
+            am_image = _get_or_new_image(base_name + "_am", size)
+            am_image.colorspace_settings.name = "sRGB"
+            _fill_image(am_image, albedo + (1.0,))
+            _save_png(am_image, directory)
+
+            maor_image = _get_or_new_image(base_name + "_maor", size, alpha=True)
+            maor_image.colorspace_settings.name = "Non-Color"
+            count = size * size
+            ao_source = _find_ao_image(base_name, directory)
+            g = (
+                _grayscale_channel_from_image(ao_source, size)
+                if ao_source is not None
+                else np.full(count, ao_value, dtype=np.float32)
+            )
+            packed = np.empty(count * 4, dtype=np.float32)
+            packed[0::4] = metal_value
+            packed[1::4] = g
+            packed[2::4] = 0.0
+            packed[3::4] = roughness_value
+            maor_image.pixels.foreach_set(packed)
+            maor_image.update()
+            _save_png(maor_image, directory)
+
+            nm_image = _get_or_new_image(base_name + "_nm", size)
+            nm_image.colorspace_settings.name = "Non-Color"
+            _fill_image(nm_image, (0.5, 0.5, 1.0, 1.0))
+            _save_png(nm_image, directory)
+
+            created.append(base_name)
+
+        self.report({"INFO"}, "Generated base textures for %d object(s)" % len(created))
+        context.scene["uvtt_checker_tip"] = "Generated base textures: " + ", ".join(created)
+        return {"FINISHED"}
+
+
 class UVTT_PT_tools(bpy.types.Panel):
     bl_label = "Tools"
     bl_idname = "UVTT_PT_tools"
@@ -1741,16 +1889,6 @@ class UVTT_PT_tools(bpy.types.Panel):
             % round(context.scene.uvtt_lod_ratio * 100)
         )
         box.operator("uvtt.auto_lod", text="Generate LODs", icon="MOD_DECIM")
-
-        box = layout.box()
-        box.label(text="Bake AO")
-        box.prop(context.scene, "uvtt_bake_ao_size", text="Map Size (px)")
-        box.prop(context.scene, "uvtt_bake_ao_samples", text="Samples")
-        box.prop(context.scene, "uvtt_bake_ao_margin", text="Margin (px)")
-        box.prop(context.scene, "uvtt_bake_ao_denoise")
-        box.operator("uvtt.bake_ao", text="Bake AO", icon="IMAGE_DATA")
-        if not bpy.data.filepath:
-            box.label(text="Save the .blend file first", icon="ERROR")
 
 
 class UVTT_PT_checker_tips(bpy.types.Panel):
@@ -1806,6 +1944,7 @@ classes = (
     UVTT_OT_render_preview,
     UVTT_OT_auto_lod,
     UVTT_OT_bake_ao,
+    UVTT_OT_generate_base_tex,
     UVTT_PT_viewport_guide,
     UVTT_PT_prepare,
     UVTT_PT_statistics,
@@ -1867,11 +2006,56 @@ def register():
         description="Denoise the bake result",
         default=True,
     )
+    bpy.types.Scene.uvtt_basetex_size = bpy.props.EnumProperty(
+        name="Map Size",
+        description="Resolution of the generated base textures",
+        items=operators.MAP_SIZES,
+        default="1024",
+    )
+    bpy.types.Scene.uvtt_basetex_albedo_color = bpy.props.FloatVectorProperty(
+        name="Albedo",
+        description="Flat fill color for the albedo texture",
+        subtype="COLOR",
+        size=3,
+        default=(0.5, 0.5, 0.5),
+        min=0.0,
+        max=1.0,
+    )
+    bpy.types.Scene.uvtt_basetex_metal = bpy.props.FloatProperty(
+        name="Metal",
+        description="Flat fill value for the Metal channel (R) of the MAOR texture",
+        default=0.0,
+        min=0.0,
+        max=1.0,
+        subtype="FACTOR",
+    )
+    bpy.types.Scene.uvtt_basetex_ao = bpy.props.FloatProperty(
+        name="AO",
+        description="Flat fill value for the AO channel (G) of the MAOR texture - "
+        "ignored if a matching Bake AO image already exists",
+        default=1.0,
+        min=0.0,
+        max=1.0,
+        subtype="FACTOR",
+    )
+    bpy.types.Scene.uvtt_basetex_roughness = bpy.props.FloatProperty(
+        name="Roughness",
+        description="Flat fill value for the Roughness channel (Alpha) of the MAOR texture",
+        default=0.5,
+        min=0.0,
+        max=1.0,
+        subtype="FACTOR",
+    )
 
 
 def unregister():
     _remove_dimension_handlers()
 
+    del bpy.types.Scene.uvtt_basetex_roughness
+    del bpy.types.Scene.uvtt_basetex_ao
+    del bpy.types.Scene.uvtt_basetex_metal
+    del bpy.types.Scene.uvtt_basetex_albedo_color
+    del bpy.types.Scene.uvtt_basetex_size
     del bpy.types.Scene.uvtt_bake_ao_denoise
     del bpy.types.Scene.uvtt_bake_ao_margin
     del bpy.types.Scene.uvtt_bake_ao_samples
