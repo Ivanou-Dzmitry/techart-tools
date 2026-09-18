@@ -210,6 +210,25 @@ class UVTT_PT_texel(bpy.types.Panel):
         )
 
 
+class UVTT_PT_uv_tools(bpy.types.Panel):
+    bl_label = "Tools"
+    bl_idname = "UVTT_PT_uv_tools"
+    bl_space_type = "IMAGE_EDITOR"
+    bl_region_type = "UI"
+    bl_category = "TechArt Tools"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        layout = self.layout
+
+        box = layout.box()
+        box.label(text="Export UV Layout", icon="EXPORT")
+        box.prop(context.scene, "uvtt_export_uv_size", text="Map Size (px)")
+        box.operator("uvtt.export_uv_layout", text="Export UV", icon="EXPORT")
+        if not bpy.data.filepath:
+            box.label(text="Save the .blend file first", icon="ERROR")
+
+
 class UVTT_PT_tips(bpy.types.Panel):
     bl_label = "Tips"
     bl_idname = "UVTT_PT_tips"
@@ -234,6 +253,7 @@ classes = (
     UVTT_PT_uv_manipulation,
     UVTT_PT_checkers,
     UVTT_PT_texel,
+    UVTT_PT_uv_tools,
     UVTT_PT_tips,
 )
 

@@ -4,7 +4,7 @@
 
 The tool lives in two places, each opening with an **Online Guide** button linking back to this page:
 
-* **UV Editor sidebar (N-panel → TechArt Tools tab)** — three collapsible sections: **UV Manipulation** (transforms), **Checkers** (checker textures, Render UV) and **Texel** (UV utilization, texel density).
+* **UV Editor sidebar (N-panel → TechArt Tools tab)** — four collapsible sections: **UV Manipulation** (transforms), **Checkers** (checker textures, Render UV), **Texel** (UV utilization, texel density) and **Tools** (Export UV Layout).
 * **3D Viewport sidebar (N-panel → TechArt Tools tab)** — six collapsible sections: **Preparation** (batch mesh/scene cleanup), **Statistics** (mesh/UV stats and a bounding-box dimension overlay), **Material** (Gloss/Matte/NM check materials, AO baking, base texture set generation), **Checker** (13-point QA checklist), **Tools** (FBX/OBJ export, intersection check, viewport preview render, Auto LOD) and **Tips**.
 
 All sections are collapsed by default so the sidebar stays short — expand only what you need. A **Tips** section appears after most actions with a short, contextual explanation of what just happened and why it matters.
@@ -134,6 +134,14 @@ Each flagged category shows a **Select** button to jump straight to the offendin
 ##### Clean Check
 
 Removes the check material and clears the results.
+
+---
+
+## Tools
+
+### Export UV Layout
+
+Exports the current UV set's layout as `<mesh name>_uv<N>.png` next to the `.blend` file, where `<N>` is the number of the active UV set (1 for the first UV map, 2 for the second, and so on). Pick a **Map Size** (64 up to 8K) and press **Export UV**. A plain export - no texture is applied back onto the object (see **Render UV**, in the Checkers panel, for that).
 
 ---
 

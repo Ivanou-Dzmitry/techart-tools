@@ -13,7 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
-TECHART_VERSION = "0.31.0"
+TECHART_VERSION = "0.32.0"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -650,6 +650,54 @@ class UVTT_OT_render_uv(bpy.types.Operator):
             "UV Editor." % filepath,
         )
 
+        return {"FINISHED"}
+
+
+class UVTT_OT_export_uv_layout(bpy.types.Operator):
+    """Export the object's current UV set layout as a PNG next to the .blend file"""
+
+    bl_idname = "uvtt.export_uv_layout"
+    bl_label = "Export UV"
+    bl_options = {"REGISTER"}
+
+    @classmethod
+    def poll(cls, context):
+        return (
+            context.edit_object is not None
+            and context.edit_object.type == "MESH"
+            and bool(context.edit_object.data.uv_layers)
+        )
+
+    def execute(self, context):
+        if not bpy.data.filepath:
+            self.report(
+                {"WARNING"}, "Save the .blend file first - the output path is derived from it"
+            )
+            return {"CANCELLED"}
+        if bpy.data.is_dirty:
+            bpy.ops.wm.save_mainfile()
+
+        obj = context.edit_object
+        size = int(context.scene.uvtt_export_uv_size)
+        uv_index = obj.data.uv_layers.active_index + 1
+        directory = os.path.dirname(bpy.data.filepath)
+        filepath = os.path.join(
+            directory, "%s_uv%d.png" % (_safe_filename(obj.name), uv_index)
+        )
+
+        result = bpy.ops.uv.export_layout(
+            filepath=filepath,
+            check_existing=False,
+            export_all=True,
+            mode="PNG",
+            size=(size, size),
+            opacity=0.25,
+        )
+        if "FINISHED" not in result:
+            self.report({"ERROR"}, "Could not export UV layout")
+            return {"CANCELLED"}
+
+        self.report({"INFO"}, "Exported UV layout to %s" % filepath)
         return {"FINISHED"}
 
 
@@ -1463,6 +1511,7 @@ classes = (
     UVTT_OT_align,
     UVTT_OT_set_checker,
     UVTT_OT_render_uv,
+    UVTT_OT_export_uv_layout,
     UVTT_OT_set_checker_size,
     UVTT_OT_set_gloss,
     UVTT_OT_set_matte,
@@ -1552,6 +1601,12 @@ def register():
         max=1.0,
         subtype="FACTOR",
     )
+    bpy.types.Scene.uvtt_export_uv_size = bpy.props.EnumProperty(
+        name="Map Size",
+        description="Resolution of the exported UV layout image",
+        items=MAP_SIZES,
+        default="1024",
+    )
 
     bpy.types.Object.uvtt_original_material = bpy.props.PointerProperty(type=bpy.types.Material)
     bpy.types.Object.uvtt_material_saved = bpy.props.BoolProperty(default=False)
@@ -1561,6 +1616,7 @@ def unregister():
     del bpy.types.Object.uvtt_material_saved
     del bpy.types.Object.uvtt_original_material
 
+    del bpy.types.Scene.uvtt_export_uv_size
     del bpy.types.Scene.uvtt_render_uv_opacity
     del bpy.types.Scene.uvtt_render_uv_size
     del bpy.types.Scene.uvtt_tiny_uv_px
