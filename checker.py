@@ -1110,7 +1110,7 @@ class UVTT_PT_material(bpy.types.Panel):
         row.prop(context.scene, "uvtt_basetex_maor_suffix", text="")
 
         row = box.row(align=True)
-        row.label(text="Normal: flat")
+        row.label(text="Normal: flat" if not get_current else "Normal: flat, or existing map")
         row.prop(context.scene, "uvtt_basetex_normal_suffix", text="")
         box.operator("uvtt.generate_base_tex", text="Generate Base Tex", icon="TEXTURE")
         if not bpy.data.filepath:
@@ -1800,24 +1800,26 @@ def _save_png(image, directory):
     return filepath
 
 
-def _average_image_value(image, want_color):
-    count = image.size[0] * image.size[1]
-    if count == 0:
-        return None
-    channels = image.channels
-    flat = np.empty(count * channels, dtype=np.float32)
-    image.pixels.foreach_get(flat)
-    flat = flat.reshape((count, channels))
-    if want_color:
-        return tuple(float(v) for v in flat[:, :3].mean(axis=0))
-    return float(flat[:, 0].mean())
+def _repacked_copy(source_image, name, size):
+    """Duplicate an existing image (never touching the original) under a new
+    name, resized to match the requested output size."""
+
+    existing = bpy.data.images.get(name)
+    if existing is not None:
+        bpy.data.images.remove(existing)
+    copy_image = source_image.copy()
+    copy_image.name = name
+    if tuple(copy_image.size) != (size, size):
+        copy_image.scale(size, size)
+    return copy_image
 
 
-def _read_bsdf_value(obj, input_name, want_color):
-    """Read a Principled BSDF input's current value off the object's active
-    material: the plain value if unconnected, or the average color/level of
-    the Image Texture feeding it, if one is connected. Returns None if there
-    is no material, no Principled BSDF, or the input is fed by anything else.
+def _bsdf_source(obj, input_name):
+    """Trace a Principled BSDF input on the object's active material back to
+    either a plain value ("VALUE", value) or the Image Texture feeding it
+    ("IMAGE", image) - following one Normal Map node for the Normal input.
+    Returns None if there is no material, no Principled BSDF, or the input
+    is fed by anything else.
     """
 
     mat = obj.active_material
@@ -1829,10 +1831,15 @@ def _read_bsdf_value(obj, input_name, want_color):
     socket = bsdf.inputs[input_name]
     if not socket.is_linked:
         value = socket.default_value
-        return tuple(value)[:3] if want_color else float(value)
+        return ("VALUE", tuple(value)[:3] if hasattr(value, "__len__") else float(value))
     from_node = socket.links[0].from_node
+    if from_node.type == "NORMAL_MAP":
+        color_input = from_node.inputs.get("Color")
+        if color_input is None or not color_input.is_linked:
+            return None
+        from_node = color_input.links[0].from_node
     if from_node.type == "TEX_IMAGE" and from_node.image is not None:
-        return _average_image_value(from_node.image, want_color)
+        return ("IMAGE", from_node.image)
     return None
 
 
@@ -1847,11 +1854,14 @@ class UVTT_OT_generate_base_tex(SaveFileMixin, bpy.types.Operator):
     already exists (e.g. from Bake AO), it is used for the AO channel
     instead of the flat AO value.
 
-    With "Get Current Maps" on, Albedo/Metal/Roughness are read per object
-    from its active material's Principled BSDF instead of the fields above -
-    the plain value if unconnected, or the average of the Image Texture
-    feeding it, if one is connected - falling back to the fields when the
-    object has no usable material.
+    With "Get Current Maps" on, Albedo/Metal/Roughness/Normal are read per
+    object from its active material's Principled BSDF instead of a flat
+    fill: an unconnected input's plain value is used as the fill, and an
+    Image Texture feeding it (directly, or via a Normal Map node for
+    Normal) is copied and resized into the output instead - so an already
+    textured object keeps its real detail rather than being flattened to
+    one value. Falls back to the fields/flat normal when the object has no
+    usable material.
     """
 
     bl_idname = "uvtt.generate_base_tex"
@@ -1881,45 +1891,62 @@ class UVTT_OT_generate_base_tex(SaveFileMixin, bpy.types.Operator):
         created = []
         for obj in _checker_objects(context):
             base_name = _safe_filename(obj.name)
+            am_name = base_name + am_suffix
+            maor_name = base_name + maor_suffix
+            nm_name = base_name + nm_suffix
 
-            obj_albedo, obj_metal, obj_roughness = albedo, metal_value, roughness_value
-            if get_current:
-                color = _read_bsdf_value(obj, "Base Color", want_color=True)
-                if color is not None:
-                    obj_albedo = color
-                metal = _read_bsdf_value(obj, "Metallic", want_color=False)
-                if metal is not None:
-                    obj_metal = metal
-                rough = _read_bsdf_value(obj, "Roughness", want_color=False)
-                if rough is not None:
-                    obj_roughness = rough
+            albedo_source = _bsdf_source(obj, "Base Color") if get_current else None
+            metal_source = _bsdf_source(obj, "Metallic") if get_current else None
+            roughness_source = _bsdf_source(obj, "Roughness") if get_current else None
+            normal_source = _bsdf_source(obj, "Normal") if get_current else None
 
-            am_image = _get_or_new_image(base_name + am_suffix, size)
-            am_image.colorspace_settings.name = "sRGB"
-            _fill_image(am_image, tuple(obj_albedo) + (1.0,))
+            if albedo_source is not None and albedo_source[0] == "IMAGE":
+                am_image = _repacked_copy(albedo_source[1], am_name, size)
+            else:
+                am_image = _get_or_new_image(am_name, size)
+                am_image.colorspace_settings.name = "sRGB"
+                fill_color = albedo_source[1] if albedo_source is not None else albedo
+                _fill_image(am_image, tuple(fill_color) + (1.0,))
             _save_png(am_image, directory)
 
-            maor_image = _get_or_new_image(base_name + maor_suffix, size, alpha=True)
+            maor_image = _get_or_new_image(maor_name, size, alpha=True)
             maor_image.colorspace_settings.name = "Non-Color"
             count = size * size
+
+            if metal_source is not None and metal_source[0] == "IMAGE":
+                r = _grayscale_channel_from_image(metal_source[1], size)
+            else:
+                metal_fill = metal_source[1] if metal_source is not None else metal_value
+                r = np.full(count, metal_fill, dtype=np.float32)
+
             ao_source = _find_ao_image(base_name, directory)
             g = (
                 _grayscale_channel_from_image(ao_source, size)
                 if ao_source is not None
                 else np.full(count, ao_value, dtype=np.float32)
             )
+
+            if roughness_source is not None and roughness_source[0] == "IMAGE":
+                a = _grayscale_channel_from_image(roughness_source[1], size)
+            else:
+                roughness_fill = roughness_source[1] if roughness_source is not None else roughness_value
+                a = np.full(count, roughness_fill, dtype=np.float32)
+
             packed = np.empty(count * 4, dtype=np.float32)
-            packed[0::4] = obj_metal
+            packed[0::4] = r
             packed[1::4] = g
             packed[2::4] = 0.0
-            packed[3::4] = obj_roughness
+            packed[3::4] = a
             maor_image.pixels.foreach_set(packed)
             maor_image.update()
             _save_png(maor_image, directory)
 
-            nm_image = _get_or_new_image(base_name + nm_suffix, size)
-            nm_image.colorspace_settings.name = "Non-Color"
-            _fill_image(nm_image, (0.5, 0.5, 1.0, 1.0))
+            if normal_source is not None and normal_source[0] == "IMAGE":
+                nm_image = _repacked_copy(normal_source[1], nm_name, size)
+            else:
+                nm_image = _get_or_new_image(nm_name, size)
+                nm_image.colorspace_settings.name = "Non-Color"
+                _fill_image(nm_image, (0.5, 0.5, 1.0, 1.0))
             _save_png(nm_image, directory)
 
             created.append(base_name)
@@ -2088,9 +2115,10 @@ def register():
     )
     bpy.types.Scene.uvtt_basetex_get_current = bpy.props.BoolProperty(
         name="Get Current Maps",
-        description="Read Albedo/Metal/Roughness per object from its active material's "
-        "Principled BSDF instead of the fields below - the plain value if unconnected, "
-        "or the average of the Image Texture feeding it, if one is connected",
+        description="Read Albedo/Metal/Roughness/Normal per object from its active "
+        "material's Principled BSDF instead of a flat fill - the plain value if "
+        "unconnected, or a resized copy of the Image Texture feeding it, if one is "
+        "connected",
         default=False,
     )
     bpy.types.Scene.uvtt_basetex_size = bpy.props.EnumProperty(
