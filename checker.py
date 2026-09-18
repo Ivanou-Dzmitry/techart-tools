@@ -1087,11 +1087,17 @@ class UVTT_PT_material(bpy.types.Panel):
         box = layout.box()
         box.label(text="Base Texture Set")
         box.prop(context.scene, "uvtt_basetex_size", text="Map Size (px)")
-        box.prop(context.scene, "uvtt_basetex_albedo_color", text="Albedo")
+        row = box.row(align=True)
+        row.prop(context.scene, "uvtt_basetex_albedo_color", text="Albedo")
+        row.prop(context.scene, "uvtt_basetex_albedo_suffix", text="")
         box.prop(context.scene, "uvtt_basetex_metal", text="Metal")
         box.prop(context.scene, "uvtt_basetex_ao", text="AO")
-        box.prop(context.scene, "uvtt_basetex_roughness", text="Roughness")
-        box.label(text='Normal: flat, saved as "_nm"')
+        row = box.row(align=True)
+        row.prop(context.scene, "uvtt_basetex_roughness", text="Roughness")
+        row.prop(context.scene, "uvtt_basetex_maor_suffix", text="")
+        row = box.row(align=True)
+        row.label(text="Normal: flat")
+        row.prop(context.scene, "uvtt_basetex_normal_suffix", text="")
         box.operator("uvtt.generate_base_tex", text="Generate Base Tex", icon="TEXTURE")
         if not bpy.data.filepath:
             box.label(text="Save the .blend file first", icon="ERROR")
@@ -1784,10 +1790,12 @@ class UVTT_OT_generate_base_tex(SaveFileMixin, bpy.types.Operator):
     """Generate a flat-fill base texture set for the selected mesh(es).
 
     A quick, correctly-named and correctly-packed starting point to paint
-    over: "<mesh>_am.png" (RGB albedo), "<mesh>_maor.png" (RGBA - Metal in
-    R, AO in G, Roughness in Alpha) and "<mesh>_nm.png" (flat tangent-space
-    normal). If a "<mesh>_ao" image already exists (e.g. from Bake AO), it
-    is used for the AO channel instead of the flat AO value.
+    over: "<mesh><am suffix>.png" (RGB albedo, suffix defaults to "_am"),
+    "<mesh><maor suffix>.png" (RGBA - Metal in R, AO in G, Roughness in
+    Alpha, defaults to "_maor") and "<mesh><nm suffix>.png" (flat
+    tangent-space normal, defaults to "_nm"). If a "<mesh>_ao" image
+    already exists (e.g. from Bake AO), it is used for the AO channel
+    instead of the flat AO value.
     """
 
     bl_idname = "uvtt.generate_base_tex"
@@ -1809,17 +1817,20 @@ class UVTT_OT_generate_base_tex(SaveFileMixin, bpy.types.Operator):
         metal_value = scene.uvtt_basetex_metal
         ao_value = scene.uvtt_basetex_ao
         roughness_value = scene.uvtt_basetex_roughness
+        am_suffix = scene.uvtt_basetex_albedo_suffix.strip() or "_am"
+        maor_suffix = scene.uvtt_basetex_maor_suffix.strip() or "_maor"
+        nm_suffix = scene.uvtt_basetex_normal_suffix.strip() or "_nm"
 
         created = []
         for obj in _checker_objects(context):
             base_name = _safe_filename(obj.name)
 
-            am_image = _get_or_new_image(base_name + "_am", size)
+            am_image = _get_or_new_image(base_name + am_suffix, size)
             am_image.colorspace_settings.name = "sRGB"
             _fill_image(am_image, albedo + (1.0,))
             _save_png(am_image, directory)
 
-            maor_image = _get_or_new_image(base_name + "_maor", size, alpha=True)
+            maor_image = _get_or_new_image(base_name + maor_suffix, size, alpha=True)
             maor_image.colorspace_settings.name = "Non-Color"
             count = size * size
             ao_source = _find_ao_image(base_name, directory)
@@ -1837,7 +1848,7 @@ class UVTT_OT_generate_base_tex(SaveFileMixin, bpy.types.Operator):
             maor_image.update()
             _save_png(maor_image, directory)
 
-            nm_image = _get_or_new_image(base_name + "_nm", size)
+            nm_image = _get_or_new_image(base_name + nm_suffix, size)
             nm_image.colorspace_settings.name = "Non-Color"
             _fill_image(nm_image, (0.5, 0.5, 1.0, 1.0))
             _save_png(nm_image, directory)
@@ -2046,11 +2057,29 @@ def register():
         max=1.0,
         subtype="FACTOR",
     )
+    bpy.types.Scene.uvtt_basetex_albedo_suffix = bpy.props.StringProperty(
+        name="Suffix",
+        description='Filename suffix for the albedo texture (defaults to "_am" if left empty)',
+        default="_am",
+    )
+    bpy.types.Scene.uvtt_basetex_maor_suffix = bpy.props.StringProperty(
+        name="Suffix",
+        description='Filename suffix for the metal/AO/roughness texture (defaults to "_maor" if left empty)',
+        default="_maor",
+    )
+    bpy.types.Scene.uvtt_basetex_normal_suffix = bpy.props.StringProperty(
+        name="Suffix",
+        description='Filename suffix for the normal map texture (defaults to "_nm" if left empty)',
+        default="_nm",
+    )
 
 
 def unregister():
     _remove_dimension_handlers()
 
+    del bpy.types.Scene.uvtt_basetex_normal_suffix
+    del bpy.types.Scene.uvtt_basetex_maor_suffix
+    del bpy.types.Scene.uvtt_basetex_albedo_suffix
     del bpy.types.Scene.uvtt_basetex_roughness
     del bpy.types.Scene.uvtt_basetex_ao
     del bpy.types.Scene.uvtt_basetex_metal
