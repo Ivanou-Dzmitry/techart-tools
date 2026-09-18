@@ -1086,15 +1086,29 @@ class UVTT_PT_material(bpy.types.Panel):
 
         box = layout.box()
         box.label(text="Base Texture Set")
+        box.prop(context.scene, "uvtt_basetex_get_current")
         box.prop(context.scene, "uvtt_basetex_size", text="Map Size (px)")
+
+        get_current = context.scene.uvtt_basetex_get_current
+
         row = box.row(align=True)
-        row.prop(context.scene, "uvtt_basetex_albedo_color", text="Albedo")
+        sub = row.row(align=True)
+        sub.enabled = not get_current
+        sub.prop(context.scene, "uvtt_basetex_albedo_color", text="Albedo")
         row.prop(context.scene, "uvtt_basetex_albedo_suffix", text="")
-        box.prop(context.scene, "uvtt_basetex_metal", text="Metal")
+
+        sub = box.row()
+        sub.enabled = not get_current
+        sub.prop(context.scene, "uvtt_basetex_metal", text="Metal")
+
         box.prop(context.scene, "uvtt_basetex_ao", text="AO")
+
         row = box.row(align=True)
-        row.prop(context.scene, "uvtt_basetex_roughness", text="Roughness")
+        sub = row.row(align=True)
+        sub.enabled = not get_current
+        sub.prop(context.scene, "uvtt_basetex_roughness", text="Roughness")
         row.prop(context.scene, "uvtt_basetex_maor_suffix", text="")
+
         row = box.row(align=True)
         row.label(text="Normal: flat")
         row.prop(context.scene, "uvtt_basetex_normal_suffix", text="")
@@ -1786,6 +1800,42 @@ def _save_png(image, directory):
     return filepath
 
 
+def _average_image_value(image, want_color):
+    count = image.size[0] * image.size[1]
+    if count == 0:
+        return None
+    channels = image.channels
+    flat = np.empty(count * channels, dtype=np.float32)
+    image.pixels.foreach_get(flat)
+    flat = flat.reshape((count, channels))
+    if want_color:
+        return tuple(float(v) for v in flat[:, :3].mean(axis=0))
+    return float(flat[:, 0].mean())
+
+
+def _read_bsdf_value(obj, input_name, want_color):
+    """Read a Principled BSDF input's current value off the object's active
+    material: the plain value if unconnected, or the average color/level of
+    the Image Texture feeding it, if one is connected. Returns None if there
+    is no material, no Principled BSDF, or the input is fed by anything else.
+    """
+
+    mat = obj.active_material
+    if mat is None or mat.node_tree is None:
+        return None
+    bsdf = mat.node_tree.nodes.get("Principled BSDF")
+    if bsdf is None or input_name not in bsdf.inputs:
+        return None
+    socket = bsdf.inputs[input_name]
+    if not socket.is_linked:
+        value = socket.default_value
+        return tuple(value)[:3] if want_color else float(value)
+    from_node = socket.links[0].from_node
+    if from_node.type == "TEX_IMAGE" and from_node.image is not None:
+        return _average_image_value(from_node.image, want_color)
+    return None
+
+
 class UVTT_OT_generate_base_tex(SaveFileMixin, bpy.types.Operator):
     """Generate a flat-fill base texture set for the selected mesh(es).
 
@@ -1796,6 +1846,12 @@ class UVTT_OT_generate_base_tex(SaveFileMixin, bpy.types.Operator):
     tangent-space normal, defaults to "_nm"). If a "<mesh>_ao" image
     already exists (e.g. from Bake AO), it is used for the AO channel
     instead of the flat AO value.
+
+    With "Get Current Maps" on, Albedo/Metal/Roughness are read per object
+    from its active material's Principled BSDF instead of the fields above -
+    the plain value if unconnected, or the average of the Image Texture
+    feeding it, if one is connected - falling back to the fields when the
+    object has no usable material.
     """
 
     bl_idname = "uvtt.generate_base_tex"
@@ -1820,14 +1876,27 @@ class UVTT_OT_generate_base_tex(SaveFileMixin, bpy.types.Operator):
         am_suffix = scene.uvtt_basetex_albedo_suffix.strip() or "_am"
         maor_suffix = scene.uvtt_basetex_maor_suffix.strip() or "_maor"
         nm_suffix = scene.uvtt_basetex_normal_suffix.strip() or "_nm"
+        get_current = scene.uvtt_basetex_get_current
 
         created = []
         for obj in _checker_objects(context):
             base_name = _safe_filename(obj.name)
 
+            obj_albedo, obj_metal, obj_roughness = albedo, metal_value, roughness_value
+            if get_current:
+                color = _read_bsdf_value(obj, "Base Color", want_color=True)
+                if color is not None:
+                    obj_albedo = color
+                metal = _read_bsdf_value(obj, "Metallic", want_color=False)
+                if metal is not None:
+                    obj_metal = metal
+                rough = _read_bsdf_value(obj, "Roughness", want_color=False)
+                if rough is not None:
+                    obj_roughness = rough
+
             am_image = _get_or_new_image(base_name + am_suffix, size)
             am_image.colorspace_settings.name = "sRGB"
-            _fill_image(am_image, albedo + (1.0,))
+            _fill_image(am_image, tuple(obj_albedo) + (1.0,))
             _save_png(am_image, directory)
 
             maor_image = _get_or_new_image(base_name + maor_suffix, size, alpha=True)
@@ -1840,10 +1909,10 @@ class UVTT_OT_generate_base_tex(SaveFileMixin, bpy.types.Operator):
                 else np.full(count, ao_value, dtype=np.float32)
             )
             packed = np.empty(count * 4, dtype=np.float32)
-            packed[0::4] = metal_value
+            packed[0::4] = obj_metal
             packed[1::4] = g
             packed[2::4] = 0.0
-            packed[3::4] = roughness_value
+            packed[3::4] = obj_roughness
             maor_image.pixels.foreach_set(packed)
             maor_image.update()
             _save_png(maor_image, directory)
@@ -2017,6 +2086,13 @@ def register():
         description="Denoise the bake result",
         default=True,
     )
+    bpy.types.Scene.uvtt_basetex_get_current = bpy.props.BoolProperty(
+        name="Get Current Maps",
+        description="Read Albedo/Metal/Roughness per object from its active material's "
+        "Principled BSDF instead of the fields below - the plain value if unconnected, "
+        "or the average of the Image Texture feeding it, if one is connected",
+        default=False,
+    )
     bpy.types.Scene.uvtt_basetex_size = bpy.props.EnumProperty(
         name="Map Size",
         description="Resolution of the generated base textures",
@@ -2085,6 +2161,7 @@ def unregister():
     del bpy.types.Scene.uvtt_basetex_metal
     del bpy.types.Scene.uvtt_basetex_albedo_color
     del bpy.types.Scene.uvtt_basetex_size
+    del bpy.types.Scene.uvtt_basetex_get_current
     del bpy.types.Scene.uvtt_bake_ao_denoise
     del bpy.types.Scene.uvtt_bake_ao_margin
     del bpy.types.Scene.uvtt_bake_ao_samples
