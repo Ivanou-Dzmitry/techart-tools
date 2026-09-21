@@ -13,7 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
-TECHART_VERSION = "0.35.0"
+TECHART_VERSION = "0.35.1"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -519,12 +519,11 @@ class UVTT_OT_flip(bpy.types.Operator):
 class UVTT_OT_auto_uv(bpy.types.Operator):
     """Cube-project the whole mesh and pack the resulting UV islands.
 
-    Cube Projection keeps every island aligned to the object's own axes
-    instead of the arbitrary rotation a Smart UV-style unwrap can pick, so
-    "up" stays up and "down" stays down - as long as the object has no
-    unapplied rotation (Apply Transform first, so local axes match World).
-    Pack Islands then runs with Rotate off and Scale on, so packing tightens
-    the layout without undoing that alignment.
+    Applies rotation and scale on the object(s) first (Cube Projection uses
+    local axes, so "up" only stays up if local axes already match World),
+    then cube-projects and runs Pack Islands with Rotate off and Scale on,
+    so islands keep a consistent, world-aligned orientation instead of the
+    arbitrary rotation a Smart UV-style unwrap can pick.
     """
 
     bl_idname = "uvtt.auto_uv"
@@ -537,6 +536,17 @@ class UVTT_OT_auto_uv(bpy.types.Operator):
 
     def execute(self, context):
         margin = context.scene.uvtt_auto_uv_margin
+        objects = _edit_mesh_objects(context)
+
+        bpy.ops.object.mode_set(mode="OBJECT")
+        with context.temp_override(
+            active_object=objects[0],
+            selected_editable_objects=objects,
+            selected_objects=objects,
+            object=objects[0],
+        ):
+            bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+        bpy.ops.object.mode_set(mode="EDIT")
 
         bpy.ops.mesh.select_all(action="SELECT")
         bpy.ops.uv.cube_project()
@@ -545,9 +555,9 @@ class UVTT_OT_auto_uv(bpy.types.Operator):
         _clear_uv_utilization(context)
         _set_tip(
             context,
-            "Cube-projected and packed the UV layout (Rotate off, Scale on), so "
-            "islands keep their world-aligned orientation instead of being "
-            "rotated arbitrarily.",
+            "Applied rotation/scale, then cube-projected and packed the UV layout "
+            "(Rotate off, Scale on), so islands keep their world-aligned "
+            "orientation instead of being rotated arbitrarily.",
         )
 
         return {"FINISHED"}

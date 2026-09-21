@@ -29,7 +29,7 @@ Latest release / download: [github.com/Ivanou-Dzmitry/techart-tools/releases](ht
 
 ### Auto UV
 
-One-click unwrap for the whole mesh: Cube Projection followed by Pack Islands (Rotate off, Scale on, with the **Margin** you set). Cube Projection keeps every island aligned to the object's own axes instead of the arbitrary rotation a Smart UV-style unwrap can pick, so "up" stays up and "down" stays down — provided the object has no unapplied rotation (run **Apply Transform** / **Prepare Mesh** first, so local axes match World).
+One-click unwrap for the whole mesh: applies rotation and scale on the object(s), then runs Cube Projection followed by Pack Islands (Rotate off, Scale on, with the **Margin** you set). Cube Projection keeps every island aligned to the object's own axes instead of the arbitrary rotation a Smart UV-style unwrap can pick — applying transform first guarantees those axes match World, so "up" stays up and "down" stays down.
 
 ### Rotate
 
