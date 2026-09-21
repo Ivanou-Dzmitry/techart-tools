@@ -93,6 +93,11 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
         row.operator("uvtt.align", text="V-align").axis = "X"
         row.operator("uvtt.align", text="H-align").axis = "Y"
 
+        box = layout.box()
+        box.label(text="Stack Similar", icon="STICKY_UVS_LOC")
+        box.prop(context.scene, "uvtt_stack_range")
+        box.operator("uvtt.stack_similar", text="To Stack", icon="SNAP_ON")
+
 
 class UVTT_PT_checkers(bpy.types.Panel):
     bl_label = "Checkers"

@@ -13,7 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
-TECHART_VERSION = "0.35.1"
+TECHART_VERSION = "0.36.0"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -558,6 +558,112 @@ class UVTT_OT_auto_uv(bpy.types.Operator):
             "Applied rotation/scale, then cube-projected and packed the UV layout "
             "(Rotate off, Scale on), so islands keep their world-aligned "
             "orientation instead of being rotated arbitrarily.",
+        )
+
+        return {"FINISHED"}
+
+
+def _uv_island_bbox_center_dims(island, uv_layer):
+    xs = []
+    ys = []
+    for face in island:
+        for loop in face.loops:
+            uv = loop[uv_layer].uv
+            xs.append(uv.x)
+            ys.append(uv.y)
+    x0, x1 = min(xs), max(xs)
+    y0, y1 = min(ys), max(ys)
+    center = Vector(((x0 + x1) / 2.0, (y0 + y1) / 2.0))
+    dims = tuple(sorted((x1 - x0, y1 - y0)))
+    return center, dims
+
+
+def _dims_similar(a, b, tolerance):
+    for x, y in zip(a, b):
+        if abs(x - y) > max(x, y) * tolerance:
+            return False
+    return True
+
+
+class UVTT_OT_stack_similar(bpy.types.Operator):
+    """Find UV islands with a similar bounding-box size and stack them.
+
+    Islands are grouped by (width, height), matched within the Range
+    tolerance regardless of orientation - a duplicate rotated 90 degrees
+    still counts as similar. Every island in a group is moved - translated
+    only, never scaled or rotated - onto the first island found in that
+    group. Works on the current face selection, or the whole mesh if
+    nothing is selected.
+    """
+
+    bl_idname = "uvtt.stack_similar"
+    bl_label = "To Stack"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.edit_object is not None and context.edit_object.type == "MESH"
+
+    def execute(self, context):
+        tolerance = context.scene.uvtt_stack_range / 100.0
+        stacked = 0
+        groups_used = 0
+
+        for obj in _edit_mesh_objects(context):
+            bm = bmesh.from_edit_mesh(obj.data)
+            uv_layer = bm.loops.layers.uv.active
+            if uv_layer is None:
+                continue
+
+            faces = [f for f in bm.faces if f.select] or list(bm.faces)
+            if not faces:
+                continue
+
+            islands = _uv_islands_from_faces(faces, uv_layer)
+            entries = []
+            for island in islands:
+                center, dims = _uv_island_bbox_center_dims(island, uv_layer)
+                entries.append({"island": island, "center": center, "dims": dims})
+
+            used = [False] * len(entries)
+            for i, entry in enumerate(entries):
+                if used[i]:
+                    continue
+                group = [i]
+                for j in range(i + 1, len(entries)):
+                    if not used[j] and _dims_similar(entry["dims"], entries[j]["dims"], tolerance):
+                        group.append(j)
+
+                used[i] = True
+                if len(group) < 2:
+                    continue
+
+                anchor = entries[group[0]]
+                for idx in group[1:]:
+                    used[idx] = True
+                    member = entries[idx]
+                    offset = anchor["center"] - member["center"]
+                    for face in member["island"]:
+                        for loop in face.loops:
+                            loop[uv_layer].uv += offset
+                    stacked += 1
+                groups_used += 1
+
+            bmesh.update_edit_mesh(obj.data)
+
+        if stacked == 0:
+            self.report({"WARNING"}, "No similar-sized UV islands found to stack")
+            return {"CANCELLED"}
+
+        _clear_uv_utilization(context)
+        self.report(
+            {"INFO"}, "Stacked %d island(s) onto %d matching island(s)" % (stacked, groups_used)
+        )
+        _set_tip(
+            context,
+            "Stacked %d UV island(s) with a similar bounding-box size onto %d "
+            "matching island(s), within a %d%% size tolerance."
+            % (stacked, groups_used, context.scene.uvtt_stack_range),
         )
 
         return {"FINISHED"}
@@ -1617,6 +1723,7 @@ classes = (
     UVTT_OT_align,
     UVTT_OT_flip,
     UVTT_OT_auto_uv,
+    UVTT_OT_stack_similar,
     UVTT_OT_set_checker,
     UVTT_OT_render_uv,
     UVTT_OT_export_uv_layout,
@@ -1723,6 +1830,14 @@ def register():
         max=0.5,
         subtype="FACTOR",
     )
+    bpy.types.Scene.uvtt_stack_range = bpy.props.IntProperty(
+        name="Range +/- (%)",
+        description="How close two UV islands' bounding-box dimensions must be to "
+        "count as similar",
+        default=2,
+        min=0,
+        max=50,
+    )
 
     bpy.types.Object.uvtt_original_material = bpy.props.PointerProperty(type=bpy.types.Material)
     bpy.types.Object.uvtt_material_saved = bpy.props.BoolProperty(default=False)
@@ -1732,6 +1847,7 @@ def unregister():
     del bpy.types.Object.uvtt_material_saved
     del bpy.types.Object.uvtt_original_material
 
+    del bpy.types.Scene.uvtt_stack_range
     del bpy.types.Scene.uvtt_auto_uv_margin
     del bpy.types.Scene.uvtt_export_uv_size
     del bpy.types.Scene.uvtt_render_uv_opacity

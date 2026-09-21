@@ -54,6 +54,10 @@ Mirrors the selected UVs around their median point: **Flip U** (horizontal) / **
 
 Useful for straightening tileable trims and repeating patterns.
 
+### Stack Similar
+
+Finds UV islands with a similar bounding-box size and stacks them onto each other — handy for kit-bashed sets with many near-identical modules, so they can share the same texture space. Islands are grouped by width/height within the **Range +/- (%)** tolerance, regardless of orientation (a duplicate rotated 90° still counts as similar), and every island in a group is moved - translated only, never scaled or rotated - onto the first island found in that group. Press **To Stack**: with faces selected it only considers those, otherwise it scans the whole mesh.
+
 ---
 
 ## Checkers
