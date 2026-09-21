@@ -62,7 +62,7 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
 
         box = layout.box()
         box.label(text="Scale", icon="CON_SIZELIKE")
-        grid = box.grid_flow(columns=2, align=True)
+        grid = box.grid_flow(columns=4, align=True)
         grid.operator("uvtt.scale", text="x0.25").factor = 0.25
         grid.operator("uvtt.scale", text="x0.5").factor = 0.5
         grid.operator("uvtt.scale", text="x2").factor = 2.0
@@ -70,11 +70,17 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
 
         box = layout.box()
         box.label(text="Move UV", icon="CON_LOCLIKE")
-        grid = box.grid_flow(columns=2, align=True)
+        grid = box.grid_flow(columns=4, align=True)
         grid.operator("uvtt.move", text="-1U", icon="TRIA_LEFT").offset_u = -1.0
         grid.operator("uvtt.move", text="+1U", icon="TRIA_RIGHT").offset_u = 1.0
         grid.operator("uvtt.move", text="-1V", icon="TRIA_DOWN").offset_v = -1.0
         grid.operator("uvtt.move", text="+1V", icon="TRIA_UP").offset_v = 1.0
+
+        box = layout.box()
+        box.label(text="Flip", icon="MOD_MIRROR")
+        row = box.row(align=True)
+        row.operator("uvtt.flip", text="Flip U", icon="TRIA_LEFT").axis = "U"
+        row.operator("uvtt.flip", text="Flip V", icon="TRIA_DOWN").axis = "V"
 
         box = layout.box()
         box.label(text="Align", icon="OBJECT_ORIGIN")

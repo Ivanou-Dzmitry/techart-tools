@@ -13,7 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
-TECHART_VERSION = "0.33.2"
+TECHART_VERSION = "0.34.0"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -452,6 +452,65 @@ class UVTT_OT_align(bpy.types.Operator):
             context,
             "Aligned the selected UVs into a single row or column. Useful for "
             "straightening tileable trims and repeating patterns.",
+        )
+
+        return {"FINISHED"}
+
+
+class UVTT_OT_flip(bpy.types.Operator):
+    """Mirror selected UVs along U or V around their median point"""
+
+    bl_idname = "uvtt.flip"
+    bl_label = "Flip UV"
+    bl_options = {"REGISTER", "UNDO"}
+
+    axis: bpy.props.EnumProperty(
+        name="Axis",
+        items=(
+            ("U", "U", "Mirror along U (horizontal)"),
+            ("V", "V", "Mirror along V (vertical)"),
+        ),
+        default="U",
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return context.edit_object is not None and context.edit_object.type == "MESH"
+
+    def execute(self, context):
+        any_selected = False
+
+        for obj in _edit_mesh_objects(context):
+            bm = bmesh.from_edit_mesh(obj.data)
+            uv_layer = bm.loops.layers.uv.active
+            if uv_layer is None:
+                continue
+
+            loops = _selected_uv_loops(bm, uv_layer)
+            if not loops:
+                continue
+
+            any_selected = True
+            pivot = _uv_pivot(uv_layer, loops)
+
+            for loop in loops:
+                luv = loop[uv_layer]
+                if self.axis == "U":
+                    luv.uv = (2.0 * pivot.x - luv.uv.x, luv.uv.y)
+                else:
+                    luv.uv = (luv.uv.x, 2.0 * pivot.y - luv.uv.y)
+
+            bmesh.update_edit_mesh(obj.data)
+
+        if not any_selected:
+            self.report({"WARNING"}, "No UVs selected")
+            return {"CANCELLED"}
+
+        _clear_uv_utilization(context)
+        _set_tip(
+            context,
+            "Mirrored the selected UVs around their median point along the %s axis."
+            % self.axis,
         )
 
         return {"FINISHED"}
@@ -1509,6 +1568,7 @@ classes = (
     UVTT_OT_scale,
     UVTT_OT_move,
     UVTT_OT_align,
+    UVTT_OT_flip,
     UVTT_OT_set_checker,
     UVTT_OT_render_uv,
     UVTT_OT_export_uv_layout,

@@ -39,6 +39,10 @@ Scales the selected UVs around their median point: **x0.25 / x0.5 / x2 / x4**. A
 
 Shifts the selected UVs by exactly one full tile along U or V: **-1U / +1U / -1V / +1V**. Handy for tiling textures or moving an island onto a neighboring UV tile.
 
+### Flip
+
+Mirrors the selected UVs around their median point: **Flip U** (horizontal) / **Flip V** (vertical). Equivalent to Blender's own UV Mirror, without leaving this panel.
+
 ### Align
 
 * **V-align** — snaps all selected UVs to a single X coordinate (the median), producing a vertical line.
