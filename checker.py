@@ -1012,12 +1012,79 @@ class UVTT_PT_prepare(bpy.types.Panel):
         layout = self.layout
 
         box = layout.box()
-        box.label(text="Mesh")
-        box.operator("uvtt.prepare_mesh", text="Prepare Mesh", icon="MESH_DATA")
+        box.label(text="Preparation")
+        row = box.row(align=True)
+        row.operator("uvtt.prepare_mesh", text="Prepare Mesh", icon="MESH_DATA")
+        row.operator("uvtt.prepare_scene", text="Prepare Scene", icon="SCENE_DATA")
+
+
+class UVTT_OT_align_mesh(bpy.types.Operator):
+    """Align selected vertices to their common average position along one
+    world axis, flattening them into a plane"""
+
+    bl_idname = "uvtt.align_mesh"
+    bl_label = "Align"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.edit_object is not None and context.edit_object.type == "MESH"
+
+    def execute(self, context):
+        axis_index = "XYZ".index(context.scene.uvtt_mesh_align_axis)
+
+        entries = []
+        total = 0.0
+        count = 0
+
+        for obj in operators._edit_mesh_objects(context):
+            bm = bmesh.from_edit_mesh(obj.data)
+            verts = [v for v in bm.verts if v.select]
+            if not verts:
+                continue
+            entries.append((obj, verts))
+            for v in verts:
+                total += (obj.matrix_world @ v.co)[axis_index]
+                count += 1
+
+        if count == 0:
+            self.report({"WARNING"}, "No vertices selected")
+            return {"CANCELLED"}
+
+        average = total / count
+
+        for obj, verts in entries:
+            matrix_world = obj.matrix_world
+            matrix_inv = matrix_world.inverted()
+            for v in verts:
+                world_co = matrix_world @ v.co
+                world_co[axis_index] = average
+                v.co = matrix_inv @ world_co
+            bmesh.update_edit_mesh(obj.data)
+
+        context.scene["uvtt_checker_tip"] = (
+            "Aligned the selected vertices to a common average position along "
+            "the %s axis, flattening them into a plane." % context.scene.uvtt_mesh_align_axis
+        )
+
+        return {"FINISHED"}
+
+
+class UVTT_PT_mesh_tools(bpy.types.Panel):
+    bl_label = "Mesh Tools"
+    bl_idname = "UVTT_PT_mesh_tools"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "TechArt Tools"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        layout = self.layout
 
         box = layout.box()
-        box.label(text="Scene")
-        box.operator("uvtt.prepare_scene", text="Prepare Scene", icon="SCENE_DATA")
+        box.label(text="Align", icon="OBJECT_ORIGIN")
+        box.row(align=True).prop(context.scene, "uvtt_mesh_align_axis", expand=True)
+        box.operator("uvtt.align_mesh", text="Align")
 
 
 class UVTT_PT_statistics(bpy.types.Panel):
@@ -2061,8 +2128,10 @@ classes = (
     UVTT_OT_auto_lod,
     UVTT_OT_bake_ao,
     UVTT_OT_generate_base_tex,
+    UVTT_OT_align_mesh,
     UVTT_PT_viewport_guide,
     UVTT_PT_prepare,
+    UVTT_PT_mesh_tools,
     UVTT_PT_statistics,
     UVTT_PT_material,
     UVTT_PT_checker,
@@ -2185,11 +2254,22 @@ def register():
         description='Filename suffix for the normal map texture (defaults to "_nm" if left empty)',
         default="_nm",
     )
+    bpy.types.Scene.uvtt_mesh_align_axis = bpy.props.EnumProperty(
+        name="Axis",
+        description="World axis to align the selected vertices along",
+        items=(
+            ("X", "X", "Align along the X axis"),
+            ("Y", "Y", "Align along the Y axis"),
+            ("Z", "Z", "Align along the Z axis"),
+        ),
+        default="Z",
+    )
 
 
 def unregister():
     _remove_dimension_handlers()
 
+    del bpy.types.Scene.uvtt_mesh_align_axis
     del bpy.types.Scene.uvtt_basetex_normal_suffix
     del bpy.types.Scene.uvtt_basetex_maor_suffix
     del bpy.types.Scene.uvtt_basetex_albedo_suffix

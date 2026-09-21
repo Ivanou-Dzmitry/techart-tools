@@ -5,7 +5,7 @@
 The tool lives in two places, each opening with an **Online Guide** button linking back to this page:
 
 * **UV Editor sidebar (N-panel → TechArt Tools tab)** — four collapsible sections: **UV Manipulation** (transforms), **Checkers** (checker textures, Render UV), **Texel** (UV utilization, texel density) and **Tools** (Export UV Layout).
-* **3D Viewport sidebar (N-panel → TechArt Tools tab)** — six collapsible sections: **Preparation** (batch mesh/scene cleanup), **Statistics** (mesh/UV stats and a bounding-box dimension overlay), **Material** (Gloss/Matte/NM check materials, AO baking, base texture set generation), **Checker** (13-point QA checklist), **Tools** (FBX/OBJ export, intersection check, viewport preview render, Auto LOD) and **Tips**.
+* **3D Viewport sidebar (N-panel → TechArt Tools tab)** — seven collapsible sections: **Preparation** (batch mesh/scene cleanup), **Mesh Tools** (flatten selected vertices along a world axis), **Statistics** (mesh/UV stats and a bounding-box dimension overlay), **Material** (Gloss/Matte/NM check materials, AO baking, base texture set generation), **Checker** (13-point QA checklist), **Tools** (FBX/OBJ export, intersection check, viewport preview render, Auto LOD) and **Tips**.
 
 All sections are collapsed by default so the sidebar stays short — expand only what you need. A **Tips** section appears after most actions with a short, contextual explanation of what just happened and why it matters.
 
@@ -169,6 +169,10 @@ Six collapsible sections, all under the **TechArt Tools** tab in the 3D Viewport
 
 * **Prepare Mesh** — batch-cleans the selected object(s): unhides the object and any hidden vertices/edges/faces, clears "unselectable" locking, resets scale and rotation (Apply Transform), assigns a `<name>_mat` material to any object that has none, and switches backface culling on for all of its materials.
 * **Prepare Scene** — batch-cleans the whole scene: sets units to Metric with a scale of 1.0, unhides every object and collection, and makes texture paths relative to the saved file.
+
+### Mesh Tools
+
+* **Align** (Edit Mode) — sets every selected vertex's position along the chosen world **Axis** (X/Y/Z) to the common average, flattening the selection into a plane. Works across a multi-object Edit Mode selection, averaging in world space.
 
 ### Statistics
 
