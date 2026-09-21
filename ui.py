@@ -53,6 +53,11 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
         layout = self.layout
 
         box = layout.box()
+        box.label(text="Auto UV", icon="MOD_UVPROJECT")
+        box.prop(context.scene, "uvtt_auto_uv_margin")
+        box.operator("uvtt.auto_uv", text="Unwrap", icon="UV")
+
+        box = layout.box()
         box.label(text="Rotate", icon="CON_ROTLIKE")
         grid = box.grid_flow(columns=2, align=True)
         grid.operator("uvtt.rotate", text="CW 90°").angle = -90.0

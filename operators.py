@@ -13,7 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
-TECHART_VERSION = "0.34.0"
+TECHART_VERSION = "0.35.0"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -511,6 +511,43 @@ class UVTT_OT_flip(bpy.types.Operator):
             context,
             "Mirrored the selected UVs around their median point along the %s axis."
             % self.axis,
+        )
+
+        return {"FINISHED"}
+
+
+class UVTT_OT_auto_uv(bpy.types.Operator):
+    """Cube-project the whole mesh and pack the resulting UV islands.
+
+    Cube Projection keeps every island aligned to the object's own axes
+    instead of the arbitrary rotation a Smart UV-style unwrap can pick, so
+    "up" stays up and "down" stays down - as long as the object has no
+    unapplied rotation (Apply Transform first, so local axes match World).
+    Pack Islands then runs with Rotate off and Scale on, so packing tightens
+    the layout without undoing that alignment.
+    """
+
+    bl_idname = "uvtt.auto_uv"
+    bl_label = "Unwrap"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.edit_object is not None and context.edit_object.type == "MESH"
+
+    def execute(self, context):
+        margin = context.scene.uvtt_auto_uv_margin
+
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.uv.cube_project()
+        bpy.ops.uv.pack_islands(rotate=False, scale=True, margin=margin)
+
+        _clear_uv_utilization(context)
+        _set_tip(
+            context,
+            "Cube-projected and packed the UV layout (Rotate off, Scale on), so "
+            "islands keep their world-aligned orientation instead of being "
+            "rotated arbitrarily.",
         )
 
         return {"FINISHED"}
@@ -1569,6 +1606,7 @@ classes = (
     UVTT_OT_move,
     UVTT_OT_align,
     UVTT_OT_flip,
+    UVTT_OT_auto_uv,
     UVTT_OT_set_checker,
     UVTT_OT_render_uv,
     UVTT_OT_export_uv_layout,
@@ -1667,6 +1705,14 @@ def register():
         items=MAP_SIZES,
         default="1024",
     )
+    bpy.types.Scene.uvtt_auto_uv_margin = bpy.props.FloatProperty(
+        name="Margin",
+        description="Margin left between packed UV islands",
+        default=0.03,
+        min=0.0,
+        max=0.5,
+        subtype="FACTOR",
+    )
 
     bpy.types.Object.uvtt_original_material = bpy.props.PointerProperty(type=bpy.types.Material)
     bpy.types.Object.uvtt_material_saved = bpy.props.BoolProperty(default=False)
@@ -1676,6 +1722,7 @@ def unregister():
     del bpy.types.Object.uvtt_material_saved
     del bpy.types.Object.uvtt_original_material
 
+    del bpy.types.Scene.uvtt_auto_uv_margin
     del bpy.types.Scene.uvtt_export_uv_size
     del bpy.types.Scene.uvtt_render_uv_opacity
     del bpy.types.Scene.uvtt_render_uv_size
