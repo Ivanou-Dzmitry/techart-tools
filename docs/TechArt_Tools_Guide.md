@@ -161,7 +161,7 @@ Exports the current UV set's layout as `<mesh name>_uv<N>.png` next to the `.ble
 
 ## 3D Viewport Panel
 
-Six collapsible sections, all under the **TechArt Tools** tab in the 3D Viewport sidebar (N-panel). Export, Render Preview and the bulk Preparation/Fix actions derive their output location from the saved `.blend` file: if there are unsaved changes they offer a **Save & Continue / Cancel** prompt first, and if the file has never been saved at all they just warn, since there is no path to derive an output from.
+Seven collapsible sections, all under the **TechArt Tools** tab in the 3D Viewport sidebar (N-panel). Export, Render Preview and the bulk Preparation/Fix actions derive their output location from the saved `.blend` file: if there are unsaved changes they offer a **Save & Continue / Cancel** prompt first, and if the file has never been saved at all they just warn, since there is no path to derive an output from.
 
 ![3D Viewport panel: Preparation, Statistics with results and dimension overlay, and Checker running with individual check results](images/techarttools03.jpg)
 
