@@ -97,6 +97,7 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
         box = layout.box()
         box.label(text="Stack Similar", icon="STICKY_UVS_LOC")
         box.prop(context.scene, "uvtt_stack_range")
+        box.prop(context.scene, "uvtt_stack_layout_margin")
         box.operator("uvtt.stack_similar", text="To Stack", icon="SNAP_ON")
         box.label(text="Last run: %d stacks" % context.scene.uvtt_stack_last_count)
 

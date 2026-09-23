@@ -13,7 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
-TECHART_VERSION = "0.37.1"
+TECHART_VERSION = "0.38.0"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -572,7 +572,7 @@ class UVTT_OT_auto_uv(bpy.types.Operator):
         return {"FINISHED"}
 
 
-def _uv_island_bbox_center_dims(island, uv_layer):
+def _uv_island_bbox(island, uv_layer):
     xs = []
     ys = []
     for face in island:
@@ -580,11 +580,7 @@ def _uv_island_bbox_center_dims(island, uv_layer):
             uv = loop[uv_layer].uv
             xs.append(uv.x)
             ys.append(uv.y)
-    x0, x1 = min(xs), max(xs)
-    y0, y1 = min(ys), max(ys)
-    center = Vector(((x0 + x1) / 2.0, (y0 + y1) / 2.0))
-    dims = tuple(sorted((x1 - x0, y1 - y0)))
-    return center, dims
+    return min(xs), min(ys), max(xs), max(ys)
 
 
 def _dims_similar(a, b, tolerance):
@@ -594,15 +590,25 @@ def _dims_similar(a, b, tolerance):
     return True
 
 
+def _translate_island(island, uv_layer, offset):
+    for face in island:
+        for loop in face.loops:
+            loop[uv_layer].uv += offset
+
+
 class UVTT_OT_stack_similar(bpy.types.Operator):
-    """Find UV islands with a similar bounding-box size and stack them.
+    """Find UV islands with a similar bounding-box size, stack them, and
+    arrange the result into an orderly grid.
 
     Islands are grouped by (width, height), matched within the Range
     tolerance regardless of orientation - a duplicate rotated 90 degrees
     still counts as similar. Every island in a group is moved - translated
     only, never scaled or rotated - onto the first island found in that
-    group. Works on the current face selection, or the whole mesh if
-    nothing is selected.
+    group. The resulting distinct shapes (stacked groups and any islands
+    left on their own) are then laid out left to right in a row, each
+    separated by Layout Margin, wrapping to a new row once the next one
+    would cross the UV tile's right edge. Works on the current face
+    selection, or the whole mesh if nothing is selected.
     """
 
     bl_idname = "uvtt.stack_similar"
@@ -615,8 +621,10 @@ class UVTT_OT_stack_similar(bpy.types.Operator):
 
     def execute(self, context):
         tolerance = context.scene.uvtt_stack_range / 100.0
+        layout_margin = context.scene.uvtt_stack_layout_margin
         stacked = 0
         groups_used = 0
+        placed = 0
 
         for obj in _edit_mesh_objects(context):
             bm = bmesh.from_edit_mesh(obj.data)
@@ -629,53 +637,104 @@ class UVTT_OT_stack_similar(bpy.types.Operator):
                 continue
 
             islands = _uv_islands_from_faces(faces, uv_layer)
-            entries = []
-            for island in islands:
-                center, dims = _uv_island_bbox_center_dims(island, uv_layer)
-                entries.append({"island": island, "center": center, "dims": dims})
+            if not islands:
+                continue
+
+            entries = [
+                {"island": island, "bbox": _uv_island_bbox(island, uv_layer)}
+                for island in islands
+            ]
 
             used = [False] * len(entries)
+            stacks = []
             for i, entry in enumerate(entries):
                 if used[i]:
                     continue
+                x0, y0, x1, y1 = entry["bbox"]
+                dims_i = tuple(sorted((x1 - x0, y1 - y0)))
                 group = [i]
                 for j in range(i + 1, len(entries)):
-                    if not used[j] and _dims_similar(entry["dims"], entries[j]["dims"], tolerance):
+                    if used[j]:
+                        continue
+                    jx0, jy0, jx1, jy1 = entries[j]["bbox"]
+                    dims_j = tuple(sorted((jx1 - jx0, jy1 - jy0)))
+                    if _dims_similar(dims_i, dims_j, tolerance):
                         group.append(j)
-
-                used[i] = True
-                if len(group) < 2:
-                    continue
-
-                anchor = entries[group[0]]
-                for idx in group[1:]:
+                for idx in group:
                     used[idx] = True
+                stacks.append(group)
+
+            stack_entries = []
+            for group in stacks:
+                anchor = entries[group[0]]
+                ax0, ay0, ax1, ay1 = anchor["bbox"]
+                anchor_center = Vector(((ax0 + ax1) / 2.0, (ay0 + ay1) / 2.0))
+                islands_here = [anchor["island"]]
+
+                for idx in group[1:]:
                     member = entries[idx]
-                    offset = anchor["center"] - member["center"]
-                    for face in member["island"]:
-                        for loop in face.loops:
-                            loop[uv_layer].uv += offset
+                    mx0, my0, mx1, my1 = member["bbox"]
+                    member_center = Vector(((mx0 + mx1) / 2.0, (my0 + my1) / 2.0))
+                    _translate_island(member["island"], uv_layer, anchor_center - member_center)
+                    islands_here.append(member["island"])
                     stacked += 1
-                groups_used += 1
+
+                if len(group) > 1:
+                    groups_used += 1
+
+                stack_entries.append(
+                    {
+                        "islands": islands_here,
+                        "x0": ax0,
+                        "y0": ay0,
+                        "width": ax1 - ax0,
+                        "height": ay1 - ay0,
+                    }
+                )
+
+            # Shelf-pack the distinct shapes left to right, wrapping to a new
+            # row once the next one would cross the UV tile's right edge.
+            stack_entries.sort(key=lambda e: e["height"], reverse=True)
+
+            cursor_u = 0.0
+            cursor_v = 0.0
+            shelf_height = 0.0
+
+            for entry in stack_entries:
+                width, height = entry["width"], entry["height"]
+                if cursor_u > 0.0 and cursor_u + width > 1.0:
+                    cursor_u = 0.0
+                    cursor_v += shelf_height + layout_margin
+                    shelf_height = 0.0
+
+                offset = Vector((cursor_u - entry["x0"], cursor_v - entry["y0"]))
+                for island in entry["islands"]:
+                    _translate_island(island, uv_layer, offset)
+                placed += 1
+
+                cursor_u += width + layout_margin
+                shelf_height = max(shelf_height, height)
 
             bmesh.update_edit_mesh(obj.data)
 
-        if stacked == 0:
+        if placed == 0:
             context.scene.uvtt_stack_last_count = 0
-            self.report({"WARNING"}, "No similar-sized UV islands found to stack")
+            self.report({"WARNING"}, "No UV islands found to stack")
             return {"CANCELLED"}
 
         context.scene.uvtt_stack_last_count = groups_used
 
         _clear_uv_utilization(context)
         self.report(
-            {"INFO"}, "Stacked %d island(s) onto %d matching island(s)" % (stacked, groups_used)
+            {"INFO"},
+            "Stacked %d island(s) into %d group(s), arranged %d shape(s) into rows"
+            % (stacked, groups_used, placed),
         )
         _set_tip(
             context,
-            "Stacked %d UV island(s) with a similar bounding-box size onto %d "
-            "matching island(s), within a %d%% size tolerance."
-            % (stacked, groups_used, context.scene.uvtt_stack_range),
+            "Stacked %d UV island(s) into %d matching group(s) (within a %d%% size "
+            "tolerance) and arranged the %d resulting shape(s) into rows across the "
+            "UV tile." % (stacked, groups_used, context.scene.uvtt_stack_range, placed),
         )
 
         return {"FINISHED"}
@@ -1850,6 +1909,14 @@ def register():
         min=0,
         max=50,
     )
+    bpy.types.Scene.uvtt_stack_layout_margin = bpy.props.FloatProperty(
+        name="Layout Margin",
+        description="Gap left between shapes when arranging the stacked result into rows",
+        default=0.02,
+        min=0.0,
+        max=0.5,
+        subtype="FACTOR",
+    )
     bpy.types.Scene.uvtt_auto_uv_last_shells = bpy.props.IntProperty(
         name="Last Run Shells",
         description="UV shell count after the last Unwrap - 0 until it has been run",
@@ -1872,6 +1939,7 @@ def unregister():
 
     del bpy.types.Scene.uvtt_stack_last_count
     del bpy.types.Scene.uvtt_auto_uv_last_shells
+    del bpy.types.Scene.uvtt_stack_layout_margin
     del bpy.types.Scene.uvtt_stack_range
     del bpy.types.Scene.uvtt_auto_uv_margin
     del bpy.types.Scene.uvtt_export_uv_size
