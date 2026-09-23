@@ -54,9 +54,10 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
 
         box = layout.box()
         box.label(text="Auto UV", icon="MOD_UVPROJECT")
-        box.prop(context.scene, "uvtt_auto_uv_margin")
+        row = box.row(align=True)
+        row.prop(context.scene, "uvtt_auto_uv_margin")
+        row.label(text="Last run: %d shells" % context.scene.uvtt_auto_uv_last_shells)
         box.operator("uvtt.auto_uv", text="Unwrap", icon="UV")
-        box.label(text="Last run: %d shells" % context.scene.uvtt_auto_uv_last_shells)
 
         box = layout.box()
         box.label(text="Rotate", icon="CON_ROTLIKE")
@@ -96,17 +97,20 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
 
         box = layout.box()
         box.label(text="Stack Similar", icon="STICKY_UVS_LOC")
-        box.prop(context.scene, "uvtt_stack_range")
-        box.prop(context.scene, "uvtt_stack_layout_margin")
+        row = box.row(align=True)
+        row.prop(context.scene, "uvtt_stack_range")
+        row.prop(context.scene, "uvtt_stack_layout_margin")
         box.operator("uvtt.stack_similar", text="To Stack", icon="SNAP_ON")
         box.label(text="Last run: %d stacks" % context.scene.uvtt_stack_last_count)
 
         box = layout.box()
         box.label(text="Stack Distributor", icon="STICKY_UVS_DISABLE")
-        box.operator("uvtt.count_stack_elements", text="Element Count")
-        box.label(text="Elements: %d" % context.scene.uvtt_stackdist_count)
-        box.prop(context.scene, "uvtt_stackdist_divide_to")
-        box.prop(context.scene, "uvtt_stackdist_margin")
+        row = box.row(align=True)
+        row.operator("uvtt.count_stack_elements", text="Element Count")
+        row.label(text="Elements: %d" % context.scene.uvtt_stackdist_count)
+        row = box.row(align=True)
+        row.prop(context.scene, "uvtt_stackdist_divide_to")
+        row.prop(context.scene, "uvtt_stackdist_margin")
         box.operator("uvtt.divide_stack", text="Divide", icon="SNAP_ON")
 
 

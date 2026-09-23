@@ -13,7 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
-TECHART_VERSION = "0.39.0"
+TECHART_VERSION = "0.39.1"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -596,23 +596,24 @@ def _translate_island(island, uv_layer, offset):
             loop[uv_layer].uv += offset
 
 
-def _shelf_pack(uv_layer, entries, margin):
-    """Translate each entry's island(s) into a left-to-right row layout
-    across the 0-1 UV tile, wrapping to a new row once the next entry would
-    cross the right edge. Each entry is a dict with "islands" (a list of
-    islands moved together as one rigid group), "x0", "y0" (its current
-    bounding-box origin) and "width"/"height". Sorts tallest-first so rows
-    come out reasonably tidy.
+def _shelf_pack(uv_layer, entries, margin, start=(0.0, 0.0)):
+    """Translate each entry's island(s) into a left-to-right row layout,
+    starting at `start` (U, V) and wrapping back to that same U once the
+    next entry would cross the UV tile's right edge (U=1). Each entry is a
+    dict with "islands" (a list of islands moved together as one rigid
+    group), "x0", "y0" (its current bounding-box origin) and
+    "width"/"height". Sorts tallest-first so rows come out reasonably tidy.
     """
 
-    cursor_u = 0.0
-    cursor_v = 0.0
+    start_u, start_v = start
+    cursor_u = start_u
+    cursor_v = start_v
     shelf_height = 0.0
 
     for entry in sorted(entries, key=lambda e: e["height"], reverse=True):
         width, height = entry["width"], entry["height"]
-        if cursor_u > 0.0 and cursor_u + width > 1.0:
-            cursor_u = 0.0
+        if cursor_u > start_u and cursor_u + width > 1.0:
+            cursor_u = start_u
             cursor_v += shelf_height + margin
             shelf_height = 0.0
 
@@ -783,14 +784,15 @@ class UVTT_OT_count_stack_elements(bpy.types.Operator):
 
 class UVTT_OT_divide_stack(bpy.types.Operator):
     """Split the selected stack of UV islands into evenly-sized groups and
-    arrange those groups into rows.
+    arrange those groups into rows, in place.
 
     Splits the islands in the current face selection into "Divide to"
     groups (in original order - any remainder goes to the last group), each
     group kept as one rigid unit (its islands stay stacked/overlapping the
-    way they were), then shelf-packs the groups left to right across the UV
-    tile with a Margin between them. Works on the current face selection
-    only.
+    way they were), then shelf-packs the groups left to right starting from
+    the stack's own current position - not the UV tile's origin - wrapping
+    to a new row once the next group would cross the tile's right edge.
+    Works on the current face selection only.
     """
 
     bl_idname = "uvtt.divide_stack"
@@ -819,6 +821,14 @@ class UVTT_OT_divide_stack(bpy.types.Operator):
             islands = _uv_islands_from_faces(faces, uv_layer)
             if not islands:
                 continue
+
+            stack_xs = []
+            stack_ys = []
+            for island in islands:
+                x0, y0, x1, y1 = _uv_island_bbox(island, uv_layer)
+                stack_xs.extend((x0, x1))
+                stack_ys.extend((y0, y1))
+            start = (min(stack_xs), min(stack_ys))
 
             n = max(1, min(divide_to, len(islands)))
             base = len(islands) // n
@@ -849,7 +859,7 @@ class UVTT_OT_divide_stack(bpy.types.Operator):
                     }
                 )
 
-            _shelf_pack(uv_layer, entries, margin)
+            _shelf_pack(uv_layer, entries, margin, start=start)
             group_count += len(entries)
 
             bmesh.update_edit_mesh(obj.data)

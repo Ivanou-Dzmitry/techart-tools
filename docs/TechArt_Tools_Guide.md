@@ -65,7 +65,7 @@ Splits a single stack of overlapping UV islands (for example, one produced by St
 * **Element Count** — counts the UV islands in the current selection and shows **Elements: N** (0 until it has been run — this is a snapshot from the last time you pressed it, not a live count).
 * **Divide to** — how many groups to split the stack into. 100 elements divided by 2 gives two groups of 50; divided by 10 gives ten groups of 10. If it doesn't divide evenly, the extra elements go into the last group.
 * **Margin** — gap left between the resulting groups.
-* **Divide** — splits the selected stack (in its original order) into that many groups, each kept together as one rigid unit (the islands inside a group stay stacked exactly as they were), then shelf-packs the groups left to right across the UV tile with **Margin** between them, wrapping to a new row at the tile's right edge - the same layout Stack Similar uses.
+* **Divide** — splits the selected stack (in its original order) into that many groups, each kept together as one rigid unit (the islands inside a group stay stacked exactly as they were), then shelf-packs the groups left to right starting from the stack's own current position — not the UV tile's origin, unlike Stack Similar — with **Margin** between them, wrapping to a new row once the next group would cross the tile's right edge.
 
 ---
 
