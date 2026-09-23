@@ -27,7 +27,7 @@ Source code: [github.com/Ivanou-Dzmitry/techart-tools](https://github.com/Ivanou
 
 ### Auto UV
 
-One-click unwrap for the whole mesh: applies rotation and scale on the object(s), then runs Cube Projection followed by Pack Islands (Rotate off, Scale on, with the **Margin** you set). Cube Projection keeps every island aligned to the object's own axes instead of the arbitrary rotation a Smart UV-style unwrap can pick — applying transform first guarantees those axes match World, so "up" stays up and "down" stays down.
+One-click unwrap for the whole mesh: applies rotation and scale on the object(s), then runs Cube Projection followed by Pack Islands (Rotate off, Scale on, with the **Margin** you set). Cube Projection keeps every island aligned to the object's own axes instead of the arbitrary rotation a Smart UV-style unwrap can pick — applying transform first guarantees those axes match World, so "up" stays up and "down" stays down. **Last run: N shells** shows the UV shell count after the most recent Unwrap (0 until it has been run) — it is not live, only a result of the last run.
 
 ### Rotate
 
@@ -54,7 +54,7 @@ Useful for straightening tileable trims and repeating patterns.
 
 ### Stack Similar
 
-Finds UV islands with a similar bounding-box size and stacks them onto each other — handy for kit-bashed sets with many near-identical modules, so they can share the same texture space. Islands are grouped by width/height within the **Range +/- (%)** tolerance, regardless of orientation (a duplicate rotated 90° still counts as similar), and every island in a group is moved - translated only, never scaled or rotated - onto the first island found in that group. Press **To Stack**: with faces selected it only considers those, otherwise it scans the whole mesh.
+Finds UV islands with a similar bounding-box size and stacks them onto each other — handy for kit-bashed sets with many near-identical modules, so they can share the same texture space. Islands are grouped by width/height within the **Range +/- (%)** tolerance, regardless of orientation (a duplicate rotated 90° still counts as similar), and every island in a group is moved - translated only, never scaled or rotated - onto the first island found in that group. Press **To Stack**: with faces selected it only considers those, otherwise it scans the whole mesh. **Last run: N stacks** shows how many groups were stacked by the most recent run (0 until it has been run) — it is not live, only a result of the last run.
 
 ---
 

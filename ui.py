@@ -56,6 +56,7 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
         box.label(text="Auto UV", icon="MOD_UVPROJECT")
         box.prop(context.scene, "uvtt_auto_uv_margin")
         box.operator("uvtt.auto_uv", text="Unwrap", icon="UV")
+        box.label(text="Last run: %d shells" % context.scene.uvtt_auto_uv_last_shells)
 
         box = layout.box()
         box.label(text="Rotate", icon="CON_ROTLIKE")
@@ -97,6 +98,7 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
         box.label(text="Stack Similar", icon="STICKY_UVS_LOC")
         box.prop(context.scene, "uvtt_stack_range")
         box.operator("uvtt.stack_similar", text="To Stack", icon="SNAP_ON")
+        box.label(text="Last run: %d stacks" % context.scene.uvtt_stack_last_count)
 
 
 class UVTT_PT_checkers(bpy.types.Panel):

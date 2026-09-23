@@ -13,7 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
-TECHART_VERSION = "0.37.0"
+TECHART_VERSION = "0.37.1"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -552,6 +552,15 @@ class UVTT_OT_auto_uv(bpy.types.Operator):
         bpy.ops.uv.cube_project()
         bpy.ops.uv.pack_islands(rotate=False, scale=True, margin=margin)
 
+        shells = 0
+        for obj in objects:
+            bm = bmesh.from_edit_mesh(obj.data)
+            uv_layer = bm.loops.layers.uv.active
+            if uv_layer is None:
+                continue
+            shells += len(_uv_islands_from_faces(list(bm.faces), uv_layer))
+        context.scene.uvtt_auto_uv_last_shells = shells
+
         _clear_uv_utilization(context)
         _set_tip(
             context,
@@ -652,8 +661,11 @@ class UVTT_OT_stack_similar(bpy.types.Operator):
             bmesh.update_edit_mesh(obj.data)
 
         if stacked == 0:
+            context.scene.uvtt_stack_last_count = 0
             self.report({"WARNING"}, "No similar-sized UV islands found to stack")
             return {"CANCELLED"}
+
+        context.scene.uvtt_stack_last_count = groups_used
 
         _clear_uv_utilization(context)
         self.report(
@@ -1838,6 +1850,17 @@ def register():
         min=0,
         max=50,
     )
+    bpy.types.Scene.uvtt_auto_uv_last_shells = bpy.props.IntProperty(
+        name="Last Run Shells",
+        description="UV shell count after the last Unwrap - 0 until it has been run",
+        default=0,
+    )
+    bpy.types.Scene.uvtt_stack_last_count = bpy.props.IntProperty(
+        name="Last Run Stacks",
+        description="Number of groups stacked by the last To Stack run - 0 until it "
+        "has been run",
+        default=0,
+    )
 
     bpy.types.Object.uvtt_original_material = bpy.props.PointerProperty(type=bpy.types.Material)
     bpy.types.Object.uvtt_material_saved = bpy.props.BoolProperty(default=False)
@@ -1847,6 +1870,8 @@ def unregister():
     del bpy.types.Object.uvtt_material_saved
     del bpy.types.Object.uvtt_original_material
 
+    del bpy.types.Scene.uvtt_stack_last_count
+    del bpy.types.Scene.uvtt_auto_uv_last_shells
     del bpy.types.Scene.uvtt_stack_range
     del bpy.types.Scene.uvtt_auto_uv_margin
     del bpy.types.Scene.uvtt_export_uv_size
