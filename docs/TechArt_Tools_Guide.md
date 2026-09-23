@@ -58,6 +58,15 @@ Useful for straightening tileable trims and repeating patterns.
 
 Finds UV islands with a similar bounding-box size, stacks them onto each other, and arranges the result into an orderly grid — handy for kit-bashed sets with many near-identical modules, so they can share the same texture space without leaving everything scattered across the UV tile. Islands are grouped by width/height within the **Range +/- (%)** tolerance, regardless of orientation (a duplicate rotated 90° still counts as similar), and every island in a group is moved - translated only, never scaled or rotated - onto the first island found in that group. The resulting distinct shapes (stacked groups and any islands left on their own) are then laid out left to right in a row, each separated by **Layout Margin**, wrapping to a new row once the next one would cross the UV tile's right edge. Press **To Stack**: with faces selected it only considers those, otherwise it scans the whole mesh. **Last run: N stacks** shows how many groups were stacked by the most recent run (0 until it has been run) — it is not live, only a result of the last run.
 
+### Stack Distributor
+
+Splits a single stack of overlapping UV islands (for example, one produced by Stack Similar) into evenly-sized groups and arranges those groups into rows — works on the current face selection only, there is no whole-mesh fallback.
+
+* **Element Count** — counts the UV islands in the current selection and shows **Elements: N** (0 until it has been run — this is a snapshot from the last time you pressed it, not a live count).
+* **Divide to** — how many groups to split the stack into. 100 elements divided by 2 gives two groups of 50; divided by 10 gives ten groups of 10. If it doesn't divide evenly, the extra elements go into the last group.
+* **Margin** — gap left between the resulting groups.
+* **Divide** — splits the selected stack (in its original order) into that many groups, each kept together as one rigid unit (the islands inside a group stay stacked exactly as they were), then shelf-packs the groups left to right across the UV tile with **Margin** between them, wrapping to a new row at the tile's right edge - the same layout Stack Similar uses.
+
 ---
 
 ## Checkers

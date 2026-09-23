@@ -13,7 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
-TECHART_VERSION = "0.38.0"
+TECHART_VERSION = "0.39.0"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -596,6 +596,34 @@ def _translate_island(island, uv_layer, offset):
             loop[uv_layer].uv += offset
 
 
+def _shelf_pack(uv_layer, entries, margin):
+    """Translate each entry's island(s) into a left-to-right row layout
+    across the 0-1 UV tile, wrapping to a new row once the next entry would
+    cross the right edge. Each entry is a dict with "islands" (a list of
+    islands moved together as one rigid group), "x0", "y0" (its current
+    bounding-box origin) and "width"/"height". Sorts tallest-first so rows
+    come out reasonably tidy.
+    """
+
+    cursor_u = 0.0
+    cursor_v = 0.0
+    shelf_height = 0.0
+
+    for entry in sorted(entries, key=lambda e: e["height"], reverse=True):
+        width, height = entry["width"], entry["height"]
+        if cursor_u > 0.0 and cursor_u + width > 1.0:
+            cursor_u = 0.0
+            cursor_v += shelf_height + margin
+            shelf_height = 0.0
+
+        offset = Vector((cursor_u - entry["x0"], cursor_v - entry["y0"]))
+        for island in entry["islands"]:
+            _translate_island(island, uv_layer, offset)
+
+        cursor_u += width + margin
+        shelf_height = max(shelf_height, height)
+
+
 class UVTT_OT_stack_similar(bpy.types.Operator):
     """Find UV islands with a similar bounding-box size, stack them, and
     arrange the result into an orderly grid.
@@ -692,28 +720,8 @@ class UVTT_OT_stack_similar(bpy.types.Operator):
                     }
                 )
 
-            # Shelf-pack the distinct shapes left to right, wrapping to a new
-            # row once the next one would cross the UV tile's right edge.
-            stack_entries.sort(key=lambda e: e["height"], reverse=True)
-
-            cursor_u = 0.0
-            cursor_v = 0.0
-            shelf_height = 0.0
-
-            for entry in stack_entries:
-                width, height = entry["width"], entry["height"]
-                if cursor_u > 0.0 and cursor_u + width > 1.0:
-                    cursor_u = 0.0
-                    cursor_v += shelf_height + layout_margin
-                    shelf_height = 0.0
-
-                offset = Vector((cursor_u - entry["x0"], cursor_v - entry["y0"]))
-                for island in entry["islands"]:
-                    _translate_island(island, uv_layer, offset)
-                placed += 1
-
-                cursor_u += width + layout_margin
-                shelf_height = max(shelf_height, height)
+            _shelf_pack(uv_layer, stack_entries, layout_margin)
+            placed += len(stack_entries)
 
             bmesh.update_edit_mesh(obj.data)
 
@@ -735,6 +743,127 @@ class UVTT_OT_stack_similar(bpy.types.Operator):
             "Stacked %d UV island(s) into %d matching group(s) (within a %d%% size "
             "tolerance) and arranged the %d resulting shape(s) into rows across the "
             "UV tile." % (stacked, groups_used, context.scene.uvtt_stack_range, placed),
+        )
+
+        return {"FINISHED"}
+
+
+class UVTT_OT_count_stack_elements(bpy.types.Operator):
+    """Count the UV islands in the current face selection - the "stack" that
+    Divide will split apart. Works on the current face selection only."""
+
+    bl_idname = "uvtt.count_stack_elements"
+    bl_label = "Element Count"
+    bl_options = {"REGISTER"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.edit_object is not None and context.edit_object.type == "MESH"
+
+    def execute(self, context):
+        count = 0
+        for obj in _edit_mesh_objects(context):
+            bm = bmesh.from_edit_mesh(obj.data)
+            uv_layer = bm.loops.layers.uv.active
+            if uv_layer is None:
+                continue
+            faces = [f for f in bm.faces if f.select]
+            if not faces:
+                continue
+            count += len(_uv_islands_from_faces(faces, uv_layer))
+
+        context.scene.uvtt_stackdist_count = count
+        if count == 0:
+            self.report({"WARNING"}, "Select a stack of overlapping UV islands first")
+            return {"CANCELLED"}
+
+        self.report({"INFO"}, "Elements: %d" % count)
+        return {"FINISHED"}
+
+
+class UVTT_OT_divide_stack(bpy.types.Operator):
+    """Split the selected stack of UV islands into evenly-sized groups and
+    arrange those groups into rows.
+
+    Splits the islands in the current face selection into "Divide to"
+    groups (in original order - any remainder goes to the last group), each
+    group kept as one rigid unit (its islands stay stacked/overlapping the
+    way they were), then shelf-packs the groups left to right across the UV
+    tile with a Margin between them. Works on the current face selection
+    only.
+    """
+
+    bl_idname = "uvtt.divide_stack"
+    bl_label = "Divide"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.edit_object is not None and context.edit_object.type == "MESH"
+
+    def execute(self, context):
+        divide_to = context.scene.uvtt_stackdist_divide_to
+        margin = context.scene.uvtt_stackdist_margin
+        group_count = 0
+
+        for obj in _edit_mesh_objects(context):
+            bm = bmesh.from_edit_mesh(obj.data)
+            uv_layer = bm.loops.layers.uv.active
+            if uv_layer is None:
+                continue
+
+            faces = [f for f in bm.faces if f.select]
+            if not faces:
+                continue
+
+            islands = _uv_islands_from_faces(faces, uv_layer)
+            if not islands:
+                continue
+
+            n = max(1, min(divide_to, len(islands)))
+            base = len(islands) // n
+            remainder = len(islands) % n
+
+            entries = []
+            index = 0
+            for g in range(n):
+                size = base + (remainder if g == n - 1 else 0)
+                if size == 0:
+                    continue
+                group_islands = islands[index : index + size]
+                index += size
+
+                xs = []
+                ys = []
+                for island in group_islands:
+                    x0, y0, x1, y1 = _uv_island_bbox(island, uv_layer)
+                    xs.extend((x0, x1))
+                    ys.extend((y0, y1))
+                entries.append(
+                    {
+                        "islands": group_islands,
+                        "x0": min(xs),
+                        "y0": min(ys),
+                        "width": max(xs) - min(xs),
+                        "height": max(ys) - min(ys),
+                    }
+                )
+
+            _shelf_pack(uv_layer, entries, margin)
+            group_count += len(entries)
+
+            bmesh.update_edit_mesh(obj.data)
+
+        if group_count == 0:
+            self.report({"WARNING"}, "Select a stack of overlapping UV islands first")
+            return {"CANCELLED"}
+
+        _clear_uv_utilization(context)
+        self.report({"INFO"}, "Divided the stack into %d group(s)" % group_count)
+        _set_tip(
+            context,
+            "Divided the selected stack into %d group(s) and arranged them into "
+            "rows across the UV tile." % group_count,
         )
 
         return {"FINISHED"}
@@ -1795,6 +1924,8 @@ classes = (
     UVTT_OT_flip,
     UVTT_OT_auto_uv,
     UVTT_OT_stack_similar,
+    UVTT_OT_count_stack_elements,
+    UVTT_OT_divide_stack,
     UVTT_OT_set_checker,
     UVTT_OT_render_uv,
     UVTT_OT_export_uv_layout,
@@ -1928,6 +2059,27 @@ def register():
         "has been run",
         default=0,
     )
+    bpy.types.Scene.uvtt_stackdist_count = bpy.props.IntProperty(
+        name="Elements",
+        description="UV island count in the current selection, from the last Element "
+        "Count run - 0 until it has been run",
+        default=0,
+    )
+    bpy.types.Scene.uvtt_stackdist_divide_to = bpy.props.IntProperty(
+        name="Divide to",
+        description="Number of groups to split the selected stack into",
+        default=2,
+        min=1,
+        max=10000,
+    )
+    bpy.types.Scene.uvtt_stackdist_margin = bpy.props.FloatProperty(
+        name="Margin",
+        description="Gap left between groups when arranging the divided stack into rows",
+        default=0.02,
+        min=0.0,
+        max=0.5,
+        subtype="FACTOR",
+    )
 
     bpy.types.Object.uvtt_original_material = bpy.props.PointerProperty(type=bpy.types.Material)
     bpy.types.Object.uvtt_material_saved = bpy.props.BoolProperty(default=False)
@@ -1937,6 +2089,9 @@ def unregister():
     del bpy.types.Object.uvtt_material_saved
     del bpy.types.Object.uvtt_original_material
 
+    del bpy.types.Scene.uvtt_stackdist_margin
+    del bpy.types.Scene.uvtt_stackdist_divide_to
+    del bpy.types.Scene.uvtt_stackdist_count
     del bpy.types.Scene.uvtt_stack_last_count
     del bpy.types.Scene.uvtt_auto_uv_last_shells
     del bpy.types.Scene.uvtt_stack_layout_margin

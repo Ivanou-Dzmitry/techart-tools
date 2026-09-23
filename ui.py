@@ -101,6 +101,14 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
         box.operator("uvtt.stack_similar", text="To Stack", icon="SNAP_ON")
         box.label(text="Last run: %d stacks" % context.scene.uvtt_stack_last_count)
 
+        box = layout.box()
+        box.label(text="Stack Distributor", icon="STICKY_UVS_DISABLE")
+        box.operator("uvtt.count_stack_elements", text="Element Count")
+        box.label(text="Elements: %d" % context.scene.uvtt_stackdist_count)
+        box.prop(context.scene, "uvtt_stackdist_divide_to")
+        box.prop(context.scene, "uvtt_stackdist_margin")
+        box.operator("uvtt.divide_stack", text="Divide", icon="SNAP_ON")
+
 
 class UVTT_PT_checkers(bpy.types.Panel):
     bl_label = "Checkers"
