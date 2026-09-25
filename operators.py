@@ -13,7 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
-TECHART_VERSION = "0.40.1"
+TECHART_VERSION = "0.41.0"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -613,6 +613,40 @@ class UVTT_OT_straighten(bpy.types.Operator):
             "Straightened the selected strip of quads by unrolling it from its end "
             "quad (Follow Active Quads), then rotated it to the nearest vertical or "
             "horizontal axis. It needs a connected strip or grid of quads.",
+        )
+
+        return {"FINISHED"}
+
+
+class UVTT_OT_relax(bpy.types.Operator):
+    """Relax the selected UVs to reduce stretching.
+
+    Wraps Blender's UV > Minimize Stretch, run for a fixed number of
+    iterations instead of interactively, so it's one click. Works on the
+    selected UVs; pinned UVs stay put.
+    """
+
+    bl_idname = "uvtt.relax"
+    bl_label = "Relax"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.edit_object is not None and context.edit_object.type == "MESH"
+
+    def execute(self, context):
+        try:
+            bpy.ops.uv.minimize_stretch(iterations=context.scene.uvtt_relax_iterations)
+        except RuntimeError as error:
+            self.report({"WARNING"}, str(error).replace("Error: ", ""))
+            return {"CANCELLED"}
+
+        _clear_uv_utilization(context)
+        _set_tip(
+            context,
+            "Relaxed the selected UVs for %d iteration(s) (Minimize Stretch) to "
+            "reduce stretching. Pin any UVs you want to keep in place first."
+            % context.scene.uvtt_relax_iterations,
         )
 
         return {"FINISHED"}
@@ -2035,6 +2069,7 @@ classes = (
     UVTT_OT_align,
     UVTT_OT_flip,
     UVTT_OT_straighten,
+    UVTT_OT_relax,
     UVTT_OT_auto_uv,
     UVTT_OT_stack_similar,
     UVTT_OT_count_stack_elements,
@@ -2172,6 +2207,13 @@ def register():
         "has been run",
         default=0,
     )
+    bpy.types.Scene.uvtt_relax_iterations = bpy.props.IntProperty(
+        name="Iterations",
+        description="How many Minimize Stretch iterations Relax runs",
+        default=50,
+        min=1,
+        max=1000,
+    )
     bpy.types.Scene.uvtt_straighten_mode = bpy.props.EnumProperty(
         name="Mode",
         description="How the straightened strip's quads are spaced",
@@ -2215,6 +2257,7 @@ def unregister():
     del bpy.types.Scene.uvtt_stackdist_margin
     del bpy.types.Scene.uvtt_stackdist_divide_to
     del bpy.types.Scene.uvtt_straighten_mode
+    del bpy.types.Scene.uvtt_relax_iterations
     del bpy.types.Scene.uvtt_stackdist_count
     del bpy.types.Scene.uvtt_stack_last_count
     del bpy.types.Scene.uvtt_auto_uv_last_shells

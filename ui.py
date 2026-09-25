@@ -102,6 +102,12 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
         row.operator("uvtt.straighten", text="Straighten")
 
         box = layout.box()
+        box.label(text="Relax", icon="MOD_SMOOTH")
+        row = box.row(align=True)
+        row.prop(context.scene, "uvtt_relax_iterations")
+        row.operator("uvtt.relax", text="Relax")
+
+        box = layout.box()
         box.label(text="Stack Similar", icon="STICKY_UVS_LOC")
         row = box.row(align=True)
         row.prop(context.scene, "uvtt_stack_range")
