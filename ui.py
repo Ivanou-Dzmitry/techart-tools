@@ -96,6 +96,12 @@ class UVTT_PT_uv_manipulation(bpy.types.Panel):
         row.operator("uvtt.align", text="H-align").axis = "Y"
 
         box = layout.box()
+        box.label(text="Straighten", icon="MOD_LATTICE")
+        row = box.row(align=True)
+        row.prop(context.scene, "uvtt_straighten_mode", text="")
+        row.operator("uvtt.straighten", text="Straighten")
+
+        box = layout.box()
         box.label(text="Stack Similar", icon="STICKY_UVS_LOC")
         row = box.row(align=True)
         row.prop(context.scene, "uvtt_stack_range")

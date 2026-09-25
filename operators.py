@@ -13,7 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
-TECHART_VERSION = "0.39.1"
+TECHART_VERSION = "0.40.0"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -511,6 +511,82 @@ class UVTT_OT_flip(bpy.types.Operator):
             context,
             "Mirrored the selected UVs around their median point along the %s axis."
             % self.axis,
+        )
+
+        return {"FINISHED"}
+
+
+class UVTT_OT_straighten(bpy.types.Operator):
+    """Straighten a curved strip of quads into a straight grid.
+
+    Wraps Blender's Follow Active Quads: picks the strip's end quad as the
+    active face (the selected quad with the fewest selected neighbours,
+    preferring the one whose UV edges are closest to axis-aligned, so the
+    result comes out upright), then unrolls the strip from it using the
+    chosen spacing mode.
+    """
+
+    bl_idname = "uvtt.straighten"
+    bl_label = "Straighten"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.edit_object is not None and context.edit_object.type == "MESH"
+
+    def execute(self, context):
+        found = False
+
+        for obj in _edit_mesh_objects(context):
+            bm = bmesh.from_edit_mesh(obj.data)
+            uv_layer = bm.loops.layers.uv.active
+            if uv_layer is None:
+                continue
+
+            faces = [
+                f for f in bm.faces if len(f.loops) == 4 and all(l.uv_select_vert for l in f.loops)
+            ]
+            if not faces:
+                continue
+            face_set = set(faces)
+
+            def neighbour_count(face):
+                return sum(
+                    1
+                    for edge in face.edges
+                    for other in edge.link_faces
+                    if other is not face and other in face_set
+                )
+
+            def axis_misalignment(face):
+                score = 0.0
+                for loop in face.loops:
+                    v = loop.link_loop_next[uv_layer].uv - loop[uv_layer].uv
+                    if v.length_squared > 0.0:
+                        score += abs(v.x * v.y) / v.length_squared
+                return score
+
+            fewest = min(neighbour_count(f) for f in faces)
+            ends = [f for f in faces if neighbour_count(f) == fewest]
+            bm.faces.active = min(ends, key=axis_misalignment)
+            bmesh.update_edit_mesh(obj.data)
+            found = True
+
+        if not found:
+            self.report({"WARNING"}, "Select a strip of quads in the UV Editor first")
+            return {"CANCELLED"}
+
+        try:
+            bpy.ops.uv.follow_active_quads(mode=context.scene.uvtt_straighten_mode)
+        except RuntimeError as error:
+            self.report({"WARNING"}, str(error).replace("Error: ", ""))
+            return {"CANCELLED"}
+
+        _clear_uv_utilization(context)
+        _set_tip(
+            context,
+            "Straightened the selected strip of quads by unrolling it from its end "
+            "quad (Follow Active Quads). It needs a connected strip or grid of quads.",
         )
 
         return {"FINISHED"}
@@ -1932,6 +2008,7 @@ classes = (
     UVTT_OT_move,
     UVTT_OT_align,
     UVTT_OT_flip,
+    UVTT_OT_straighten,
     UVTT_OT_auto_uv,
     UVTT_OT_stack_similar,
     UVTT_OT_count_stack_elements,
@@ -2069,6 +2146,16 @@ def register():
         "has been run",
         default=0,
     )
+    bpy.types.Scene.uvtt_straighten_mode = bpy.props.EnumProperty(
+        name="Mode",
+        description="How the straightened strip's quads are spaced",
+        items=(
+            ("LENGTH_AVERAGE", "Length Average", "Space quads by the average edge length of each loop"),
+            ("LENGTH", "Length", "Space quads by each edge's own length"),
+            ("EVEN", "Even", "Space all quads evenly"),
+        ),
+        default="LENGTH_AVERAGE",
+    )
     bpy.types.Scene.uvtt_stackdist_count = bpy.props.IntProperty(
         name="Elements",
         description="UV island count in the current selection, from the last Element "
@@ -2101,6 +2188,7 @@ def unregister():
 
     del bpy.types.Scene.uvtt_stackdist_margin
     del bpy.types.Scene.uvtt_stackdist_divide_to
+    del bpy.types.Scene.uvtt_straighten_mode
     del bpy.types.Scene.uvtt_stackdist_count
     del bpy.types.Scene.uvtt_stack_last_count
     del bpy.types.Scene.uvtt_auto_uv_last_shells

@@ -52,6 +52,10 @@ Mirrors the selected UVs around their median point: **Flip U** (horizontal) / **
 
 Useful for straightening tileable trims and repeating patterns.
 
+### Straighten
+
+Unrolls a curved strip of quads (a road, pipe or trim bend) into a straight grid — the same idea as Straighten in 3ds Max, unlike Align, which collapses everything to a line. It wraps Blender's own **UV → Follow Active Quads**: select the strip in the UV Editor and press **Straighten**; the end quad (the one with the fewest selected neighbours, preferring the most axis-aligned) is picked as the active face automatically, and the strip unrolls from it. **Mode** sets the spacing: **Length Average** (default, average edge length of each loop), **Length** (each edge's own length) or **Even**. Needs a connected strip or grid of quads.
+
 ### Stack Similar
 
 Finds UV islands with a similar bounding-box size, stacks them onto each other, and arranges the result into an orderly grid — handy for kit-bashed sets with many near-identical modules, so they can share the same texture space without leaving everything scattered across the UV tile. Islands are grouped by width/height within the **Range +/- (%)** tolerance, regardless of orientation (a duplicate rotated 90° still counts as similar), and every island in a group is moved - translated only, never scaled or rotated - onto the first island found in that group. The resulting distinct shapes (stacked groups and any islands left on their own) are then laid out left to right in a row, each separated by **Layout Margin**, wrapping to a new row once the next one would cross the UV tile's right edge. Press **To Stack**: with faces selected it only considers those, otherwise it scans the whole mesh. **Last run: N stacks** shows how many groups were stacked by the most recent run (0 until it has been run) — it is not live, only a result of the last run.
