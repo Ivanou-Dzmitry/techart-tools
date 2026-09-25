@@ -13,7 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
-TECHART_VERSION = "0.41.0"
+TECHART_VERSION = "0.41.1"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -1489,6 +1489,25 @@ class UVTT_OT_set_normal_check(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def _clear_image_editors_showing_ours(context):
+    """Unset the image in any UV/Image Editor that is showing one of our
+    checker or Render UV images, so Remove Checker clears it there too."""
+
+    ours = {filename for _, _, filename in CHECKERS}
+    screen = context.screen
+    if screen is None:
+        return
+    for area in screen.areas:
+        if area.type != "IMAGE_EDITOR":
+            continue
+        for space in area.spaces:
+            if space.type != "IMAGE_EDITOR" or space.image is None:
+                continue
+            name = space.image.name
+            if name in ours or name.endswith("_uv.png"):
+                space.image = None
+
+
 class UVTT_OT_reset_material(bpy.types.Operator):
     """Remove the check material from the selected objects, restoring whatever material was there before"""
 
@@ -1528,6 +1547,7 @@ class UVTT_OT_reset_material(bpy.types.Operator):
             self.report({"WARNING"}, "No mesh objects selected")
             return {"CANCELLED"}
 
+        _clear_image_editors_showing_ours(context)
         _clear_uv_utilization(context)
         _set_tip(context, "Removed all materials from the selected object(s).")
 
