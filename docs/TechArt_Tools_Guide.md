@@ -90,7 +90,7 @@ Clicking a checker thumbnail assigns it to the selected object(s) and automatica
 
 ### Texture Size
 
-Retiles the active checker to simulate a texture resolution: **128 / 256 / 512 / 1K / 2K / 4K / 8K**. This changes how many times the checker pattern repeats across the UV tile, matching what the real texture would look like at that resolution. Affects every tileable checker material in the scene (Gradient is excluded, since it is not meant to tile).
+Retiles the active checker to simulate a texture resolution: **128 / 256 / 512 / 1K / 2K / 4K / 8K**. This changes how many times the checker pattern repeats across the UV tile, matching what the real texture would look like at that resolution. Affects every tileable checker material in the scene (Gradient is excluded, since it is not meant to tile). The image shown in the UV Editor is retiled to match (a pre-tiled copy at the checker's original pixel size), so the UV Editor and the model agree; Remove Checker clears it again.
 
 ### Render UV
 

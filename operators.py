@@ -13,7 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
-TECHART_VERSION = "0.41.1"
+TECHART_VERSION = "0.42.0"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -1281,6 +1281,8 @@ class UVTT_OT_set_checker_size(bpy.types.Operator):
 
         applied = False
         skipped_gradient = False
+        editor_source = None
+        editor_repeat = 1.0
 
         for obj in objects:
             if obj.type != "MESH":
@@ -1302,6 +1304,8 @@ class UVTT_OT_set_checker_size(bpy.types.Operator):
                 base_size = max(tex_node.image.size[0], 1)
                 repeat = self.size / base_size
                 mapping.inputs["Scale"].default_value = (repeat, repeat, 1.0)
+                editor_source = tex_node.image
+                editor_repeat = repeat
                 applied = True
 
         if not applied:
@@ -1311,6 +1315,7 @@ class UVTT_OT_set_checker_size(bpy.types.Operator):
                 self.report({"WARNING"}, "Assign a checker first")
             return {"CANCELLED"}
 
+        _tile_checker_in_editors(context, editor_source, editor_repeat)
         _clear_uv_utilization(context)
         _set_tip(
             context,
@@ -1489,11 +1494,29 @@ class UVTT_OT_set_normal_check(bpy.types.Operator):
         return {"FINISHED"}
 
 
-def _clear_image_editors_showing_ours(context):
-    """Unset the image in any UV/Image Editor that is showing one of our
-    checker or Render UV images, so Remove Checker clears it there too."""
+VIEW_IMAGE_PREFIX = "UVTT_view_"
 
-    ours = {filename for _, _, filename in CHECKERS}
+
+def _our_image_names():
+    names = {filename for _, _, filename in CHECKERS}
+    for mat in bpy.data.materials:
+        if not mat.get("uvtt_checker") or mat.node_tree is None:
+            continue
+        node = mat.node_tree.nodes.get("UVTT_Image")
+        if node is not None and node.image is not None:
+            names.add(node.image.name)
+    return names
+
+
+def _is_our_editor_image(image, ours):
+    return (
+        image.name in ours
+        or image.name.startswith(VIEW_IMAGE_PREFIX)
+        or image.name.endswith("_uv.png")
+    )
+
+
+def _image_editor_spaces(context):
     screen = context.screen
     if screen is None:
         return
@@ -1501,11 +1524,66 @@ def _clear_image_editors_showing_ours(context):
         if area.type != "IMAGE_EDITOR":
             continue
         for space in area.spaces:
-            if space.type != "IMAGE_EDITOR" or space.image is None:
-                continue
-            name = space.image.name
-            if name in ours or name.endswith("_uv.png"):
+            if space.type == "IMAGE_EDITOR":
+                yield space
+
+
+def _clear_image_editors_showing_ours(context):
+    """Unset the image in any UV/Image Editor that is showing one of our
+    checker, tiled-view or Render UV images, so Remove Checker clears it
+    there too, and drop the generated tiled-view images."""
+
+    ours = _our_image_names()
+    for space in _image_editor_spaces(context):
+        if space.image is not None and _is_our_editor_image(space.image, ours):
+            space.image = None
+    for image in [i for i in bpy.data.images if i.name.startswith(VIEW_IMAGE_PREFIX)]:
+        bpy.data.images.remove(image)
+
+
+def _tile_checker_in_editors(context, source, repeat):
+    """Show the checker tiled `repeat` times in any Image Editor displaying
+    one of ours, by swapping in a pre-tiled copy (downscaled so it keeps the
+    original pixel size). A repeat of 1 or less shows the original."""
+
+    ours = _our_image_names()
+    spaces = [
+        s for s in _image_editor_spaces(context)
+        if s.image is not None and _is_our_editor_image(s.image, ours)
+    ]
+    if not spaces:
+        return
+
+    n = int(round(repeat))
+    view_name = VIEW_IMAGE_PREFIX + source.name
+    old = bpy.data.images.get(view_name)
+
+    if n <= 1:
+        target = source
+    else:
+        width, height = source.size
+        small = source.copy()
+        small.scale(max(width // n, 1), max(height // n, 1))
+        w, h = small.size
+        pixels = np.empty(w * h * 4, dtype=np.float32)
+        small.pixels.foreach_get(pixels)
+        bpy.data.images.remove(small)
+        tiled = np.tile(pixels.reshape((h, w, 4)), (n, n, 1))
+
+        for space in spaces:
+            if space.image is old:
                 space.image = None
+        if old is not None:
+            bpy.data.images.remove(old)
+        target = bpy.data.images.new(view_name, width=w * n, height=h * n)
+        target.colorspace_settings.name = source.colorspace_settings.name
+        target.pixels.foreach_set(tiled.reshape(-1))
+        target.update()
+
+    for space in spaces:
+        space.image = target
+    if n <= 1 and old is not None:
+        bpy.data.images.remove(old)
 
 
 class UVTT_OT_reset_material(bpy.types.Operator):
