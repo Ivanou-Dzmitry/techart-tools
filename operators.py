@@ -13,7 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
-TECHART_VERSION = "0.42.0"
+TECHART_VERSION = "0.42.1"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -1495,6 +1495,7 @@ class UVTT_OT_set_normal_check(bpy.types.Operator):
 
 
 VIEW_IMAGE_PREFIX = "UVTT_view_"
+EDITOR_TILE_MAX_PX = 2048
 
 
 def _our_image_names():
@@ -1543,8 +1544,10 @@ def _clear_image_editors_showing_ours(context):
 
 def _tile_checker_in_editors(context, source, repeat):
     """Show the checker tiled `repeat` times in any Image Editor displaying
-    one of ours, by swapping in a pre-tiled copy (downscaled so it keeps the
-    original pixel size). A repeat of 1 or less shows the original."""
+    one of ours, by swapping in a pre-tiled copy. Each tile keeps the
+    checker's native pixels while the result stays within EDITOR_TILE_MAX_PX,
+    and is downscaled beyond that. A repeat of 1 or less shows the
+    original."""
 
     ours = _our_image_names()
     spaces = [
@@ -1562,8 +1565,11 @@ def _tile_checker_in_editors(context, source, repeat):
         target = source
     else:
         width, height = source.size
+        tile_w = min(width, max(EDITOR_TILE_MAX_PX // n, 1))
+        tile_h = min(height, max(EDITOR_TILE_MAX_PX // n, 1))
         small = source.copy()
-        small.scale(max(width // n, 1), max(height // n, 1))
+        if (tile_w, tile_h) != (width, height):
+            small.scale(tile_w, tile_h)
         w, h = small.size
         pixels = np.empty(w * h * 4, dtype=np.float32)
         small.pixels.foreach_get(pixels)
