@@ -13,7 +13,7 @@ CHECKER_DIR = os.path.join(os.path.dirname(__file__), "checkers")
 TEXTURE_DIR = os.path.join(os.path.dirname(__file__), "textures")
 
 TECHART_URL = "https://www.frosofco.com/other/techart-tools"
-TECHART_VERSION = "0.40.0"
+TECHART_VERSION = "0.40.1"
 
 
 def wrap_text_for_region(context, text, min_chars=20):
@@ -522,8 +522,9 @@ class UVTT_OT_straighten(bpy.types.Operator):
     Wraps Blender's Follow Active Quads: picks the strip's end quad as the
     active face (the selected quad with the fewest selected neighbours,
     preferring the one whose UV edges are closest to axis-aligned, so the
-    result comes out upright), then unrolls the strip from it using the
-    chosen spacing mode.
+    result comes out upright), unrolls the strip from it using the chosen
+    spacing mode, then rotates it to the nearest vertical or horizontal
+    axis so it doesn't stay tilted.
     """
 
     bl_idname = "uvtt.straighten"
@@ -536,6 +537,7 @@ class UVTT_OT_straighten(bpy.types.Operator):
 
     def execute(self, context):
         found = False
+        strips = []
 
         for obj in _edit_mesh_objects(context):
             bm = bmesh.from_edit_mesh(obj.data)
@@ -549,6 +551,8 @@ class UVTT_OT_straighten(bpy.types.Operator):
             if not faces:
                 continue
             face_set = set(faces)
+            bm.faces.index_update()
+            strips.append((obj, [f.index for f in faces]))
 
             def neighbour_count(face):
                 return sum(
@@ -582,11 +586,33 @@ class UVTT_OT_straighten(bpy.types.Operator):
             self.report({"WARNING"}, str(error).replace("Error: ", ""))
             return {"CANCELLED"}
 
+        for obj, indices in strips:
+            bm = bmesh.from_edit_mesh(obj.data)
+            uv_layer = bm.loops.layers.uv.active
+            bm.faces.ensure_lookup_table()
+            loops = [loop for i in indices for loop in bm.faces[i].loops]
+            uvs = [loop[uv_layer].uv.copy() for loop in loops]
+            center = sum(uvs, Vector((0.0, 0.0))) / len(uvs)
+            sxx = sum((uv.x - center.x) ** 2 for uv in uvs)
+            syy = sum((uv.y - center.y) ** 2 for uv in uvs)
+            sxy = sum((uv.x - center.x) * (uv.y - center.y) for uv in uvs)
+            angle = 0.5 * math.atan2(2.0 * sxy, sxx - syy)
+            quarter = math.pi / 2.0
+            delta = round(angle / quarter) * quarter - angle
+            cos_a, sin_a = math.cos(delta), math.sin(delta)
+            for loop, uv in zip(loops, uvs):
+                rel = uv - center
+                loop[uv_layer].uv = center + Vector(
+                    (rel.x * cos_a - rel.y * sin_a, rel.x * sin_a + rel.y * cos_a)
+                )
+            bmesh.update_edit_mesh(obj.data)
+
         _clear_uv_utilization(context)
         _set_tip(
             context,
             "Straightened the selected strip of quads by unrolling it from its end "
-            "quad (Follow Active Quads). It needs a connected strip or grid of quads.",
+            "quad (Follow Active Quads), then rotated it to the nearest vertical or "
+            "horizontal axis. It needs a connected strip or grid of quads.",
         )
 
         return {"FINISHED"}

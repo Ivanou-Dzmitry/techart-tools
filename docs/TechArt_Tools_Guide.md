@@ -56,7 +56,7 @@ Useful for straightening tileable trims and repeating patterns.
 
 ### Straighten
 
-Unrolls a curved strip of quads (a road, pipe or trim bend) into a straight grid — the same idea as Straighten in 3ds Max, unlike Align, which collapses everything to a line. It wraps Blender's own **UV → Follow Active Quads**: select the strip in the UV Editor and press **Straighten**; the end quad (the one with the fewest selected neighbours, preferring the most axis-aligned) is picked as the active face automatically, and the strip unrolls from it. **Mode** sets the spacing: **Length Average** (default, average edge length of each loop), **Length** (each edge's own length) or **Even**. Needs a connected strip or grid of quads.
+Unrolls a curved strip of quads (a road, pipe or trim bend) into a straight grid — the same idea as Straighten in 3ds Max, unlike Align, which collapses everything to a line. It wraps Blender's own **UV → Follow Active Quads**: select the strip in the UV Editor and press **Straighten**; the end quad (the one with the fewest selected neighbours, preferring the most axis-aligned) is picked as the active face automatically, and the strip unrolls from it, then is rotated to the nearest vertical or horizontal axis so it doesn't stay tilted. **Mode** sets the spacing: **Length Average** (default, average edge length of each loop), **Length** (each edge's own length) or **Even**. Needs a connected strip or grid of quads.
 
 ### Stack Similar
 
